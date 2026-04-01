@@ -16,10 +16,7 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     try {
       // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-      const baseUrl = Platform.OS === 'web' && typeof window !== 'undefined' 
-        ? window.location.origin 
-        : process.env.EXPO_PUBLIC_BACKEND_URL;
-      const redirectUrl = `${baseUrl}/(auth)/auth-callback`;
+      const redirectUrl = `${window.location.origin}/(auth)/auth-callback`;
       const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
       
       await WebBrowser.openBrowserAsync(authUrl);
