@@ -70,6 +70,10 @@ class Vehicle(BaseModel):
     foto_interior: str  # tablero con llaves
     # Galería de fotos adicionales (opcional)
     galeria_fotos: Optional[List[str]] = []  # Array de fotos en base64
+    # Sistema de destacados/premium
+    es_destacado: bool = False  # Si el anuncio es destacado/premium
+    fecha_destacado_hasta: Optional[datetime] = None  # Hasta cuando está destacado
+    tipo_destacado: Optional[str] = None  # "basico" | "premium" | "ultra"
     # Metadata
     estado: str = "activo"  # "activo", "vendido", "inactivo"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -347,7 +351,7 @@ async def get_vehicles(
     limite: int = 50,
     skip: int = 0
 ):
-    """Get all vehicles with optional filters (public endpoint)"""
+    """Get all vehicles with optional filters (public endpoint) - Destacados primero"""
     filters = {"estado": "activo"}
     
     if category:
@@ -373,10 +377,43 @@ async def get_vehicles(
     if tipo_combustible:
         filters["tipo_combustible"] = tipo_combustible
     
-    vehicles = await db.vehicles.find(
-        filters,
-        {"_id": 0}
-    ).sort("created_at", -1).skip(skip).limit(limite).to_list(limite)
+    # Obtener vehículos destacados primero, luego normales
+    # Ordenar por: es_destacado (DESC), tipo_destacado (ultra > premium > basico), created_at (DESC)
+    pipeline = [
+        {"$match": filters},
+        {
+            "$addFields": {
+                "destacado_activo": {
+                    "$cond": {
+                        "if": {
+                            "$and": [
+                                {"$eq": ["$es_destacado", True]},
+                                {"$gte": ["$fecha_destacado_hasta", datetime.now(timezone.utc)]}
+                            ]
+                        },
+                        "then": 1,
+                        "else": 0
+                    }
+                },
+                "prioridad_tipo": {
+                    "$switch": {
+                        "branches": [
+                            {"case": {"$eq": ["$tipo_destacado", "ultra"]}, "then": 3},
+                            {"case": {"$eq": ["$tipo_destacado", "premium"]}, "then": 2},
+                            {"case": {"$eq": ["$tipo_destacado", "basico"]}, "then": 1}
+                        ],
+                        "default": 0
+                    }
+                }
+            }
+        },
+        {"$sort": {"destacado_activo": -1, "prioridad_tipo": -1, "created_at": -1}},
+        {"$skip": skip},
+        {"$limit": limite},
+        {"$project": {"_id": 0, "destacado_activo": 0, "prioridad_tipo": 0}}
+    ]
+    
+    vehicles = await db.vehicles.aggregate(pipeline).to_list(limite)
     
     return [Vehicle(**v) for v in vehicles]
 
@@ -472,6 +509,93 @@ async def get_my_vehicles(
         {"user_id": user.user_id},
         {"_id": 0}
     ).sort("created_at", -1).to_list(100)
+    
+    return [Vehicle(**v) for v in vehicles]
+
+# ============= DESTACADOS/PREMIUM ENDPOINTS =============
+
+class PromoteVehicleRequest(BaseModel):
+    tipo_destacado: str  # "basico" | "premium" | "ultra"
+    dias: int  # Número de días (7, 15, 30)
+
+@api_router.post("/vehicles/{vehicle_id}/promote")
+async def promote_vehicle(
+    request: Request,
+    vehicle_id: str,
+    promote_data: PromoteVehicleRequest,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Marcar vehículo como destacado (requiere pago - simulado por ahora)
+    Precios sugeridos:
+    - Básico (7 días): 10 soles
+    - Premium (15 días): 20 soles
+    - Ultra (30 días): 35 soles
+    """
+    user = await get_current_user(request, authorization)
+    
+    # Verificar que el vehículo existe y pertenece al usuario
+    vehicle = await db.vehicles.find_one(
+        {"vehicle_id": vehicle_id},
+        {"_id": 0}
+    )
+    
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehículo no encontrado")
+    
+    if vehicle["user_id"] != user.user_id:
+        raise HTTPException(status_code=403, detail="No tienes permiso para destacar este vehículo")
+    
+    # Validar tipo de destacado
+    if promote_data.tipo_destacado not in ["basico", "premium", "ultra"]:
+        raise HTTPException(status_code=400, detail="Tipo de destacado inválido")
+    
+    # Validar días
+    if promote_data.dias not in [7, 15, 30]:
+        raise HTTPException(status_code=400, detail="Días inválidos. Usa 7, 15 o 30")
+    
+    # Calcular fecha de expiración
+    fecha_hasta = datetime.now(timezone.utc) + timedelta(days=promote_data.dias)
+    
+    # Actualizar vehículo
+    await db.vehicles.update_one(
+        {"vehicle_id": vehicle_id},
+        {
+            "$set": {
+                "es_destacado": True,
+                "tipo_destacado": promote_data.tipo_destacado,
+                "fecha_destacado_hasta": fecha_hasta,
+                "updated_at": datetime.now(timezone.utc)
+            }
+        }
+    )
+    
+    # TODO: Aquí se integraría el sistema de pagos Yape/Plin
+    # Por ahora se marca como destacado directamente
+    
+    return {
+        "message": "Vehículo destacado exitosamente",
+        "tipo": promote_data.tipo_destacado,
+        "valido_hasta": fecha_hasta,
+        "nota": "Sistema de pago en desarrollo - Por ahora gratuito"
+    }
+
+@api_router.get("/vehicles/featured/list")
+async def get_featured_vehicles(limite: int = 20):
+    """Obtener solo vehículos destacados activos"""
+    now = datetime.now(timezone.utc)
+    
+    vehicles = await db.vehicles.find(
+        {
+            "estado": "activo",
+            "es_destacado": True,
+            "fecha_destacado_hasta": {"$gte": now}
+        },
+        {"_id": 0}
+    ).sort([
+        ("tipo_destacado", -1),  # ultra > premium > basico
+        ("created_at", -1)
+    ]).limit(limite).to_list(limite)
     
     return [Vehicle(**v) for v in vehicles]
 

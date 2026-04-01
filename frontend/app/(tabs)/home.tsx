@@ -77,40 +77,68 @@ export default function HomeScreen() {
       : true
   );
 
-  const renderVehicleCard = ({ item }: { item: Vehicle }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => router.push(`/vehicle/${item.vehicle_id}` as any)}
-      activeOpacity={0.9}
-    >
-      <View style={styles.imageContainer}>
-        <Image
-          source={{ uri: item.foto_frente }}
-          style={styles.cardImage}
-          resizeMode="cover"
-        />
-        <View style={styles.priceBadge}>
-          <Text style={styles.priceText}>{formatPrice(item.precio)}</Text>
-        </View>
-      </View>
-      <View style={styles.cardContent}>
-        <Text style={styles.cardTitle} numberOfLines={2}>
-          {item.marca} {item.modelo}
-        </Text>
-        <Text style={styles.cardYear}>{item.anio}</Text>
-        <View style={styles.cardFooter}>
-          <View style={styles.cardDetail}>
-            <Ionicons name="speedometer-outline" size={14} color="#666" />
-            <Text style={styles.cardDetailText}>{item.kilometraje > 1000 ? `${Math.floor(item.kilometraje/1000)}k km` : `${item.kilometraje} km`}</Text>
+  const renderVehicleCard = ({ item }: { item: Vehicle }) => {
+    // Verificar si el destacado está activo
+    const isDestacado = item.es_destacado && 
+                       item.fecha_destacado_hasta && 
+                       new Date(item.fecha_destacado_hasta) > new Date();
+    
+    const getBadgeColor = (tipo?: string) => {
+      switch(tipo) {
+        case 'ultra': return '#FF6B35'; // Naranja
+        case 'premium': return '#FFD700'; // Dorado
+        case 'basico': return COLORS_THEME.primary; // Azul turquesa
+        default: return COLORS_THEME.primary;
+      }
+    };
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.card,
+          isDestacado && styles.cardDestacado
+        ]}
+        onPress={() => router.push(`/vehicle/${item.vehicle_id}` as any)}
+        activeOpacity={0.9}
+      >
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: item.foto_frente }}
+            style={styles.cardImage}
+            resizeMode="cover"
+          />
+          {isDestacado && (
+            <View style={[styles.destacadoBadge, { backgroundColor: getBadgeColor(item.tipo_destacado) }]}>
+              <Ionicons name="star" size={14} color="#fff" />
+              <Text style={styles.destacadoText}>
+                {item.tipo_destacado === 'ultra' ? 'ULTRA' : 
+                 item.tipo_destacado === 'premium' ? 'PREMIUM' : 'DESTACADO'}
+              </Text>
+            </View>
+          )}
+          <View style={styles.priceBadge}>
+            <Text style={styles.priceText}>{formatPrice(item.precio)}</Text>
           </View>
-          <View style={styles.cardDetail}>
-            <Ionicons name="location-outline" size={14} color="#666" />
-            <Text style={styles.cardDetailText} numberOfLines={1}>{item.ciudad}</Text>
+        </View>
+        <View style={styles.cardContent}>
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {item.marca} {item.modelo}
+          </Text>
+          <Text style={styles.cardYear}>{item.anio}</Text>
+          <View style={styles.cardFooter}>
+            <View style={styles.cardDetail}>
+              <Ionicons name="speedometer-outline" size={14} color="#666" />
+              <Text style={styles.cardDetailText}>{item.kilometraje > 1000 ? `${Math.floor(item.kilometraje/1000)}k km` : `${item.kilometraje} km`}</Text>
+            </View>
+            <View style={styles.cardDetail}>
+              <Ionicons name="location-outline" size={14} color="#666" />
+              <Text style={styles.cardDetailText} numberOfLines={1}>{item.ciudad}</Text>
+            </View>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -484,6 +512,13 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  cardDestacado: {
+    borderWidth: 2,
+    borderColor: COLORS_THEME.secondary,
+    shadowColor: COLORS_THEME.secondary,
+    shadowOpacity: 0.3,
+    elevation: 6,
+  },
   imageContainer: {
     position: 'relative',
   },
@@ -491,6 +526,22 @@ const styles = StyleSheet.create({
     width: '100%',
     height: CARD_WIDTH,
     backgroundColor: '#F0F0F0',
+  },
+  destacadoBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  destacadoText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   priceBadge: {
     position: 'absolute',

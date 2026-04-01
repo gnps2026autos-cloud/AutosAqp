@@ -31,6 +31,10 @@ export interface Vehicle {
   foto_costado_izq: string;
   foto_costado_der: string;
   foto_interior: string;
+  galeria_fotos?: string[];
+  es_destacado?: boolean;
+  fecha_destacado_hasta?: string;
+  tipo_destacado?: string;
   estado: string;
   created_at: string;
   updated_at: string;
