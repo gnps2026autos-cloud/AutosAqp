@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Image,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
@@ -15,7 +16,10 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     try {
       // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-      const redirectUrl = `${process.env.EXPO_PUBLIC_BACKEND_URL}/(auth)/auth-callback`;
+      const baseUrl = Platform.OS === 'web' && typeof window !== 'undefined' 
+        ? window.location.origin 
+        : process.env.EXPO_PUBLIC_BACKEND_URL;
+      const redirectUrl = `${baseUrl}/(auth)/auth-callback`;
       const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
       
       await WebBrowser.openBrowserAsync(authUrl);
