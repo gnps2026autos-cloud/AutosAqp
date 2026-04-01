@@ -16,6 +16,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { vehiclesAPI } from '../../src/utils/api';
 import { pickImage } from '../../src/utils/imageHelper';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -42,12 +44,12 @@ interface FormData {
   descripcion: string;
   ciudad: string;
   distrito: string;
-  galeria_fotos_url: string;
   foto_frente: string;
   foto_atras: string;
   foto_costado_izq: string;
   foto_costado_der: string;
   foto_interior: string;
+  galeria_fotos: string[]; // Array de fotos adicionales en base64
 }
 
 export default function AddVehicleScreen() {
@@ -71,12 +73,12 @@ export default function AddVehicleScreen() {
     descripcion: '',
     ciudad: 'Arequipa',
     distrito: '',
-    galeria_fotos_url: '',
     foto_frente: '',
     foto_atras: '',
     foto_costado_izq: '',
     foto_costado_der: '',
     foto_interior: '',
+    galeria_fotos: [],
   });
 
   const handleImagePick = async (photoKey: keyof FormData) => {
@@ -84,6 +86,48 @@ export default function AddVehicleScreen() {
     if (imageUri) {
       setFormData({ ...formData, [photoKey]: imageUri });
     }
+  };
+
+  const handleGalleryImagesPick = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso denegado', 'Se necesitan permisos para acceder a las fotos');
+        return;
+      }
+
+      const result = await ImagePicker.launchImagePickerAsync({
+        mediaTypes: 'images' as any,
+        allowsEditing: false,
+        allowsMultipleSelection: true,
+        quality: 0.5,
+      });
+
+      if (!result.canceled && result.assets) {
+        const newImages: string[] = [];
+        for (const asset of result.assets) {
+          const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          newImages.push(`data:image/jpeg;base64,${base64}`);
+        }
+        
+        setFormData({ 
+          ...formData, 
+          galeria_fotos: [...formData.galeria_fotos, ...newImages]
+        });
+        
+        Alert.alert('Éxito', `${newImages.length} foto(s) agregada(s) a la galería`);
+      }
+    } catch (error) {
+      console.error('Error picking gallery images:', error);
+      Alert.alert('Error', 'No se pudieron agregar las fotos');
+    }
+  };
+
+  const removeGalleryImage = (index: number) => {
+    const newGallery = formData.galeria_fotos.filter((_, i) => i !== index);
+    setFormData({ ...formData, galeria_fotos: newGallery });
   };
 
   const getLocation = async () => {
@@ -212,7 +256,7 @@ export default function AddVehicleScreen() {
         foto_costado_izq: formData.foto_costado_izq,
         foto_costado_der: formData.foto_costado_der,
         foto_interior: formData.foto_interior,
-        galeria_fotos_url: formData.galeria_fotos_url || undefined,
+        galeria_fotos: formData.galeria_fotos.length > 0 ? formData.galeria_fotos : undefined,
       };
 
       await vehiclesAPI.create(vehicleData, sessionToken || undefined);
@@ -442,16 +486,6 @@ export default function AddVehicleScreen() {
             onChangeText={(text) => setFormData({ ...formData, distrito: text })}
           />
 
-          <Text style={styles.label}>Enlace a Galería de Fotos (Opcional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="https://drive.google.com/..."
-            value={formData.galeria_fotos_url}
-            onChangeText={(text) => setFormData({ ...formData, galeria_fotos_url: text })}
-            keyboardType="url"
-            autoCapitalize="none"
-          />
-
           {/* Location */}
           <TouchableOpacity
             style={[styles.locationButton, location && styles.locationButtonActive]}
@@ -475,6 +509,42 @@ export default function AddVehicleScreen() {
               {renderPhotoButton(photo.key as keyof FormData, `Agregar ${photo.label}`)}
             </View>
           ))}
+
+          {/* Additional Gallery */}
+          <Text style={styles.sectionTitle}>Galería Adicional de Fotos (Opcional)</Text>
+          <Text style={styles.helperText}>
+            Agrega más fotos de tu vehículo para mostrar detalles adicionales
+          </Text>
+          
+          <TouchableOpacity
+            style={styles.galleryButton}
+            onPress={handleGalleryImagesPick}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="images" size={24} color="#007AFF" />
+            <Text style={styles.galleryButtonText}>Agregar Fotos a la Galería</Text>
+          </TouchableOpacity>
+
+          {formData.galeria_fotos.length > 0 && (
+            <View style={styles.galleryPreview}>
+              <Text style={styles.galleryPreviewTitle}>
+                {formData.galeria_fotos.length} foto(s) en la galería
+              </Text>
+              <View style={styles.galleryGrid}>
+                {formData.galeria_fotos.map((photo, index) => (
+                  <View key={index} style={styles.galleryItem}>
+                    <Image source={{ uri: photo }} style={styles.galleryItemImage} />
+                    <TouchableOpacity
+                      style={styles.removeButton}
+                      onPress={() => removeGalleryImage(index)}
+                    >
+                      <Ionicons name="close-circle" size={24} color="#FF3B30" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
 
           <TouchableOpacity
             style={[styles.submitButton, loading && styles.submitButtonDisabled]}
@@ -647,5 +717,60 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#fff',
+  },
+  helperText: {
+    fontSize: 14,
+    color: '#999',
+    marginBottom: 12,
+  },
+  galleryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0F0F0',
+    borderWidth: 2,
+    borderColor: '#007AFF',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    paddingVertical: 16,
+    marginBottom: 16,
+    gap: 8,
+  },
+  galleryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  galleryPreview: {
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  galleryPreviewTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+  },
+  galleryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  galleryItem: {
+    width: 100,
+    height: 100,
+    position: 'relative',
+  },
+  galleryItemImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  removeButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#fff',
+    borderRadius: 12,
   },
 });

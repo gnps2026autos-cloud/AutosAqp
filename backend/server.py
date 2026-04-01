@@ -7,7 +7,7 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Dict
 import uuid
 from datetime import datetime, timezone, timedelta
 import httpx
@@ -68,8 +68,8 @@ class Vehicle(BaseModel):
     foto_costado_izq: str
     foto_costado_der: str
     foto_interior: str  # tablero con llaves
-    # Enlace a galería de fotos (opcional)
-    galeria_fotos_url: Optional[str] = None
+    # Galería de fotos adicionales (opcional)
+    galeria_fotos: Optional[List[str]] = []  # Array de fotos en base64
     # Metadata
     estado: str = "activo"  # "activo", "vendido", "inactivo"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -97,7 +97,7 @@ class VehicleCreate(BaseModel):
     foto_costado_izq: str
     foto_costado_der: str
     foto_interior: str
-    galeria_fotos_url: Optional[str] = None
+    galeria_fotos: Optional[List[str]] = []
 
 class VehicleUpdate(BaseModel):
     category: Optional[str] = None
@@ -121,7 +121,7 @@ class VehicleUpdate(BaseModel):
     foto_costado_izq: Optional[str] = None
     foto_costado_der: Optional[str] = None
     foto_interior: Optional[str] = None
-    galeria_fotos_url: Optional[str] = None
+    galeria_fotos: Optional[List[str]] = None
     estado: Optional[str] = None
 
 class Favorite(BaseModel):
