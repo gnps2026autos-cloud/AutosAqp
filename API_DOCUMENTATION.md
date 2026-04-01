@@ -1,11 +1,25 @@
-# AQP-Autos API Documentation
+# Documentación de la API - AQP-Autos by GNPS
 
 API REST completa para la aplicación AQP-Autos by GNPS
 
-**Base URL**: `http://localhost:8001/api` (desarrollo)  
-**Base URL**: `https://tu-dominio.com/api` (producción)
+**URL Base**: `http://localhost:8001/api` (desarrollo)  
+**URL Base**: `https://tu-dominio.com/api` (producción)
 
 **Versión**: 1.0.0
+
+---
+
+## ⚠️ EXENCIÓN DE RESPONSABILIDAD
+
+Esta API es proporcionada "tal cual" sin garantías de ningún tipo, expresas o implícitas. Al usar esta API, usted acepta que:
+
+1. **NO garantizamos** la precisión, integridad o actualidad de los datos.
+2. **NO somos responsables** por pérdidas o daños derivados del uso de esta API.
+3. **NO garantizamos** disponibilidad continua del servicio.
+4. Los datos de vehículos son proporcionados por usuarios y deben ser verificados independientemente.
+5. Las transacciones entre usuarios son su propia responsabilidad.
+
+**USO BAJO SU PROPIO RIESGO.**
 
 ---
 
@@ -29,14 +43,14 @@ Todos los endpoints protegidos requieren autenticación mediante:
 
 Crear una sesión de usuario mediante Google OAuth.
 
-**Request Body:**
+**Cuerpo de la Solicitud:**
 ```json
 {
   "session_id": "string"
 }
 ```
 
-**Response:** `200 OK`
+**Respuesta:** `200 OK`
 ```json
 {
   "user_id": "user_abc123",
@@ -58,12 +72,12 @@ Crear una sesión de usuario mediante Google OAuth.
 
 Obtener información del usuario autenticado actual.
 
-**Headers:**
+**Encabezados:**
 ```
 Authorization: Bearer {session_token}
 ```
 
-**Response:** `200 OK`
+**Respuesta:** `200 OK`
 ```json
 {
   "user_id": "user_abc123",
@@ -85,10 +99,10 @@ Authorization: Bearer {session_token}
 
 Cerrar la sesión del usuario actual.
 
-**Response:** `200 OK`
+**Respuesta:** `200 OK`
 ```json
 {
-  "message": "Logged out successfully"
+  "message": "Sesión cerrada exitosamente"
 }
 ```
 
@@ -98,12 +112,12 @@ Cerrar la sesión del usuario actual.
 
 Actualizar el perfil del usuario autenticado.
 
-**Headers:**
+**Encabezados:**
 ```
 Authorization: Bearer {session_token}
 ```
 
-**Request Body:**
+**Cuerpo de la Solicitud:**
 ```json
 {
   "name": "Juan Carlos Pérez",
@@ -112,7 +126,7 @@ Authorization: Bearer {session_token}
 }
 ```
 
-**Response:** `200 OK`
+**Respuesta:** `200 OK`
 ```json
 {
   "user_id": "user_abc123",
@@ -135,13 +149,13 @@ Authorization: Bearer {session_token}
 
 Crear un nuevo anuncio de vehículo (requiere autenticación).
 
-**Headers:**
+**Encabezados:**
 ```
 Authorization: Bearer {session_token}
 Content-Type: application/json
 ```
 
-**Request Body:**
+**Cuerpo de la Solicitud:**
 ```json
 {
   "category": "auto",
@@ -216,7 +230,7 @@ diesel, diesel_urea, electrico, hibrido, gas, otros
 manual, automatica
 ```
 
-**Response:** `200 OK`
+**Respuesta:** `200 OK`
 ```json
 {
   "vehicle_id": "vehicle_xyz789",
@@ -226,23 +240,7 @@ manual, automatica
   "modelo": "Corolla",
   "anio": 2020,
   "precio": 25000,
-  "kilometraje": 45000,
-  "color": "Gris",
-  "tipo_combustible": "gasolina",
-  "transmision": "automatica",
-  "num_puertas": 4,
-  "placa": "ABC-123",
-  "descripcion": "Vehículo en excelente estado",
-  "ciudad": "Arequipa",
-  "distrito": "Cayma",
-  "latitude": -16.409047,
-  "longitude": -71.537451,
-  "foto_frente": "data:image/jpeg;base64,...",
-  "foto_atras": "data:image/jpeg;base64,...",
-  "foto_costado_izq": "data:image/jpeg;base64,...",
-  "foto_costado_der": "data:image/jpeg;base64,...",
-  "foto_interior": "data:image/jpeg;base64,...",
-  "galeria_fotos": ["data:image/jpeg;base64,..."],
+  ...
   "estado": "activo",
   "created_at": "2024-01-01T12:00:00Z",
   "updated_at": "2024-01-01T12:00:00Z"
@@ -259,7 +257,7 @@ manual, automatica
 
 Listar todos los vehículos activos con filtros opcionales (público).
 
-**Query Parameters:**
+**Parámetros de Consulta:**
 - `category` (string): Filtrar por categoría
 - `marca` (string): Filtrar por marca (búsqueda parcial)
 - `modelo` (string): Filtrar por modelo (búsqueda parcial)
@@ -269,15 +267,15 @@ Listar todos los vehículos activos con filtros opcionales (público).
 - `anio_max` (int): Año máximo
 - `transmision` (string): Tipo de transmisión
 - `tipo_combustible` (string): Tipo de combustible
-- `limite` (int): Número máximo de resultados (default: 50)
-- `skip` (int): Número de resultados a saltar para paginación (default: 0)
+- `limite` (int): Número máximo de resultados (predeterminado: 50)
+- `skip` (int): Número de resultados a saltar para paginación (predeterminado: 0)
 
 **Ejemplo:**
 ```
 GET /api/vehicles?category=auto&precio_max=30000&anio_min=2018&limite=10
 ```
 
-**Response:** `200 OK`
+**Respuesta:** `200 OK`
 ```json
 [
   {
@@ -286,28 +284,7 @@ GET /api/vehicles?category=auto&precio_max=30000&anio_min=2018&limite=10
     "category": "auto",
     "marca": "Toyota",
     "modelo": "Corolla",
-    "anio": 2020,
-    "precio": 25000,
-    "kilometraje": 45000,
-    "color": "Gris",
-    "tipo_combustible": "gasolina",
-    "transmision": "automatica",
-    "num_puertas": 4,
-    "placa": "ABC-123",
-    "descripcion": "Vehículo en excelente estado",
-    "ciudad": "Arequipa",
-    "distrito": "Cayma",
-    "latitude": -16.409047,
-    "longitude": -71.537451,
-    "foto_frente": "data:image/jpeg;base64,...",
-    "foto_atras": "data:image/jpeg;base64,...",
-    "foto_costado_izq": "data:image/jpeg;base64,...",
-    "foto_costado_der": "data:image/jpeg;base64,...",
-    "foto_interior": "data:image/jpeg;base64,...",
-    "galeria_fotos": [],
-    "estado": "activo",
-    "created_at": "2024-01-01T12:00:00Z",
-    "updated_at": "2024-01-01T12:00:00Z"
+    ...
   }
 ]
 ```
@@ -318,14 +295,10 @@ GET /api/vehicles?category=auto&precio_max=30000&anio_min=2018&limite=10
 
 Obtener detalles de un vehículo específico (público).
 
-**Response:** `200 OK`
+**Respuesta:** `200 OK`
 ```json
 {
   "vehicle_id": "vehicle_xyz789",
-  "user_id": "user_abc123",
-  "category": "auto",
-  "marca": "Toyota",
-  "modelo": "Corolla",
   ...
 }
 ```
@@ -339,13 +312,13 @@ Obtener detalles de un vehículo específico (público).
 
 Actualizar un vehículo (solo el propietario, requiere autenticación).
 
-**Headers:**
+**Encabezados:**
 ```
 Authorization: Bearer {session_token}
 Content-Type: application/json
 ```
 
-**Request Body:** (todos los campos son opcionales)
+**Cuerpo de la Solicitud:** (todos los campos son opcionales)
 ```json
 {
   "precio": 24000,
@@ -355,19 +328,7 @@ Content-Type: application/json
 }
 ```
 
-**Response:** `200 OK`
-```json
-{
-  "vehicle_id": "vehicle_xyz789",
-  "user_id": "user_abc123",
-  "precio": 24000,
-  "kilometraje": 46000,
-  "descripcion": "Descripción actualizada",
-  "estado": "vendido",
-  "updated_at": "2024-01-02T12:00:00Z",
-  ...
-}
-```
+**Respuesta:** `200 OK`
 
 **Errores:**
 - `401 Unauthorized`: No autenticado
@@ -378,14 +339,14 @@ Content-Type: application/json
 
 ### DELETE /api/vehicles/{vehicle_id}
 
-Eliminar un vehículo - soft delete (solo el propietario, requiere autenticación).
+Eliminar un vehículo - eliminación suave (solo el propietario, requiere autenticación).
 
-**Headers:**
+**Encabezados:**
 ```
 Authorization: Bearer {session_token}
 ```
 
-**Response:** `200 OK`
+**Respuesta:** `200 OK`
 ```json
 {
   "message": "Vehículo eliminado exitosamente"
@@ -405,26 +366,18 @@ Authorization: Bearer {session_token}
 
 Obtener todos los vehículos del usuario autenticado (requiere autenticación).
 
-**Headers:**
+**Encabezados:**
 ```
 Authorization: Bearer {session_token}
 ```
 
-**Response:** `200 OK`
+**Respuesta:** `200 OK`
 ```json
 [
   {
     "vehicle_id": "vehicle_xyz789",
     "user_id": "user_abc123",
-    "category": "auto",
     "estado": "activo",
-    ...
-  },
-  {
-    "vehicle_id": "vehicle_abc456",
-    "user_id": "user_abc123",
-    "category": "moto",
-    "estado": "vendido",
     ...
   }
 ]
@@ -441,12 +394,12 @@ Authorization: Bearer {session_token}
 
 Agregar un vehículo a favoritos (requiere autenticación).
 
-**Headers:**
+**Encabezados:**
 ```
 Authorization: Bearer {session_token}
 ```
 
-**Response:** `200 OK`
+**Respuesta:** `200 OK`
 ```json
 {
   "message": "Añadido a favoritos"
@@ -463,12 +416,12 @@ Authorization: Bearer {session_token}
 
 Eliminar un vehículo de favoritos (requiere autenticación).
 
-**Headers:**
+**Encabezados:**
 ```
 Authorization: Bearer {session_token}
 ```
 
-**Response:** `200 OK`
+**Respuesta:** `200 OK`
 ```json
 {
   "message": "Eliminado de favoritos"
@@ -485,20 +438,16 @@ Authorization: Bearer {session_token}
 
 Obtener todos los vehículos favoritos del usuario (requiere autenticación).
 
-**Headers:**
+**Encabezados:**
 ```
 Authorization: Bearer {session_token}
 ```
 
-**Response:** `200 OK`
+**Respuesta:** `200 OK`
 ```json
 [
   {
     "vehicle_id": "vehicle_xyz789",
-    "user_id": "user_def456",
-    "category": "auto",
-    "marca": "Toyota",
-    "modelo": "Corolla",
     ...
   }
 ]
@@ -515,12 +464,12 @@ Authorization: Bearer {session_token}
 
 Verificar si un vehículo está en favoritos (requiere autenticación).
 
-**Headers:**
+**Encabezados:**
 ```
 Authorization: Bearer {session_token}
 ```
 
-**Response:** `200 OK`
+**Respuesta:** `200 OK`
 ```json
 {
   "is_favorite": true
@@ -534,7 +483,7 @@ Authorization: Bearer {session_token}
 
 ## 📊 Modelos de Datos
 
-### User
+### Usuario
 ```typescript
 {
   user_id: string;          // ID único del usuario
@@ -546,7 +495,7 @@ Authorization: Bearer {session_token}
 }
 ```
 
-### Vehicle
+### Vehículo
 ```typescript
 {
   vehicle_id: string;       // ID único del vehículo
@@ -579,7 +528,7 @@ Authorization: Bearer {session_token}
 }
 ```
 
-### Favorite
+### Favorito
 ```typescript
 {
   favorite_id: string;      // ID único del favorito
@@ -638,11 +587,20 @@ Solicitud exitosa.
 - Los endpoints de listado soportan paginación con `limite` y `skip`
 - Máximo recomendado: 50 items por página
 
-### Rate Limiting
+### Limitación de Tasa (Rate Limiting)
 - No implementado actualmente
 - Recomendado para producción
 
 ---
 
+## ⚖️ Aviso Legal Final
+
+**IMPORTANTE:** Esta API y los datos proporcionados son para facilitar el contacto entre compradores y vendedores. GNPS no verifica ni garantiza la veracidad de la información publicada. Todos los usuarios deben verificar independientemente toda la información antes de realizar cualquier transacción.
+
+**USO BAJO SU PROPIA RESPONSABILIDAD.**
+
+---
+
 **Última actualización**: 2024
 **Versión**: 1.0.0
+**Desarrollado en**: Arequipa, Perú
