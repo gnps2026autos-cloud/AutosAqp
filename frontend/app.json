@@ -1,15 +1,17 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "AQP-Autos by GNPS",
+    "slug": "aqp-autos-gnps",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
+    "scheme": "aqpautos",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.gnps.aqpautos",
+      "buildNumber": "1",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Selecciona fotos del vehículo",
         "NSCameraUsageDescription": "Toma fotos del vehículo",
@@ -19,9 +21,11 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000"
+        "backgroundColor": "#00BCD4"
       },
       "edgeToEdgeEnabled": true,
+      "package": "com.gnps.aqpautos",
+      "versionCode": 1,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -48,12 +52,24 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000"
+          "backgroundColor": "#00BCD4"
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "your-project-id-here"
+      }
+    },
+    "owner": "gnps",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
     }
   }
 }
