@@ -22,7 +22,7 @@ import { Vehicle } from '../../src/types';
 import { vehiclesAPI, paymentsAPI } from '../../src/utils/api';
 import { formatPrice, formatKm } from '../../src/utils/imageHelper';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { COLORS_THEME } from '../../src/constants';
+import { COLORS_THEME, ETIQUETAS_DESTACADO } from '../../src/constants';
 
 export default function MyVehiclesScreen() {
   const router = useRouter();
@@ -38,6 +38,7 @@ export default function MyVehiclesScreen() {
   const [numeroOperacion, setNumeroOperacion] = useState('');
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [paymentStep, setPaymentStep] = useState<'select' | 'pay' | 'confirm'>('select');
+  const [selectedEtiqueta, setSelectedEtiqueta] = useState<string>('destacado');
 
   useEffect(() => {
     loadVehicles();
@@ -89,6 +90,7 @@ export default function MyVehiclesScreen() {
     setSelectedVehicle(vehicle);
     setSelectedPlan('');
     setNumeroOperacion('');
+    setSelectedEtiqueta('destacado');
     setPaymentStep('select');
     setShowPaymentModal(true);
   };
@@ -119,7 +121,8 @@ export default function MyVehiclesScreen() {
         selectedVehicle.vehicle_id,
         selectedPlan,
         numeroOperacion.trim(),
-        sessionToken || undefined
+        sessionToken || undefined,
+        selectedEtiqueta
       );
 
       setShowPaymentModal(false);
@@ -364,6 +367,39 @@ export default function MyVehiclesScreen() {
                     </View>
                   )}
                 </TouchableOpacity>
+
+                {/* Etiqueta Selection */}
+                <Text style={styles.stepTitle}>Elige tu etiqueta</Text>
+                <View style={styles.etiquetasGrid}>
+                  {ETIQUETAS_DESTACADO.map((etiqueta) => (
+                    <TouchableOpacity
+                      key={etiqueta.value}
+                      style={[
+                        styles.etiquetaChip,
+                        selectedEtiqueta === etiqueta.value && { 
+                          backgroundColor: etiqueta.color + '20',
+                          borderColor: etiqueta.color,
+                        },
+                      ]}
+                      onPress={() => setSelectedEtiqueta(etiqueta.value)}
+                    >
+                      <Ionicons 
+                        name={etiqueta.icon as any} 
+                        size={18} 
+                        color={selectedEtiqueta === etiqueta.value ? etiqueta.color : '#666'} 
+                      />
+                      <Text style={[
+                        styles.etiquetaChipText,
+                        selectedEtiqueta === etiqueta.value && { color: etiqueta.color, fontWeight: '700' },
+                      ]}>
+                        {etiqueta.label}
+                      </Text>
+                      {selectedEtiqueta === etiqueta.value && (
+                        <Ionicons name="checkmark-circle" size={16} color={etiqueta.color} />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
 
                 <TouchableOpacity
                   style={[
@@ -1101,5 +1137,27 @@ const styles = StyleSheet.create({
   paymentActions: {
     flexDirection: 'row',
     marginTop: 8,
+  },
+  etiquetasGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  etiquetaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#fff',
+    gap: 6,
+  },
+  etiquetaChipText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
   },
 });

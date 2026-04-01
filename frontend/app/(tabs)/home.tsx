@@ -19,7 +19,7 @@ import { useRouter } from 'expo-router';
 import { Vehicle, FilterOptions } from '../../src/types';
 import { vehiclesAPI } from '../../src/utils/api';
 import { formatPrice, formatKm } from '../../src/utils/imageHelper';
-import { SECTIONS, CATEGORIES, ALL_CATEGORIES, FUEL_TYPES, TRANSMISSIONS, COLORS_THEME } from '../../src/constants';
+import { SECTIONS, CATEGORIES, ALL_CATEGORIES, FUEL_TYPES, TRANSMISSIONS, COLORS_THEME, ETIQUETAS_DESTACADO } from '../../src/constants';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2; // 2 columns with padding
@@ -83,13 +83,27 @@ export default function HomeScreen() {
                        item.fecha_destacado_hasta && 
                        new Date(item.fecha_destacado_hasta) > new Date();
     
-    const getBadgeColor = (tipo?: string) => {
+    const getBadgeColor = (tipo?: string, etiqueta?: string) => {
+      const etiquetaInfo = ETIQUETAS_DESTACADO.find(e => e.value === etiqueta);
+      if (etiquetaInfo) return etiquetaInfo.color;
       switch(tipo) {
-        case 'ultra': return '#FF6B35'; // Naranja
-        case 'premium': return '#FFD700'; // Dorado
-        case 'basico': return COLORS_THEME.primary; // Azul turquesa
+        case 'ultra': return '#FF6B35';
+        case 'premium': return '#FFD700';
+        case 'basico': return COLORS_THEME.primary;
         default: return COLORS_THEME.primary;
       }
+    };
+
+    const getBadgeLabel = (etiqueta?: string, tipo?: string) => {
+      const etiquetaInfo = ETIQUETAS_DESTACADO.find(e => e.value === etiqueta);
+      if (etiquetaInfo) return etiquetaInfo.label.toUpperCase();
+      if (tipo === 'premium') return 'PREMIUM';
+      return 'DESTACADO';
+    };
+
+    const getBadgeIcon = (etiqueta?: string): any => {
+      const etiquetaInfo = ETIQUETAS_DESTACADO.find(e => e.value === etiqueta);
+      return etiquetaInfo ? etiquetaInfo.icon : 'star';
     };
 
     return (
@@ -108,11 +122,10 @@ export default function HomeScreen() {
             resizeMode="cover"
           />
           {isDestacado && (
-            <View style={[styles.destacadoBadge, { backgroundColor: getBadgeColor(item.tipo_destacado) }]}>
-              <Ionicons name="star" size={14} color="#fff" />
+            <View style={[styles.destacadoBadge, { backgroundColor: getBadgeColor(item.tipo_destacado, item.etiqueta_destacado) }]}>
+              <Ionicons name={getBadgeIcon(item.etiqueta_destacado)} size={14} color="#fff" />
               <Text style={styles.destacadoText}>
-                {item.tipo_destacado === 'ultra' ? 'ULTRA' : 
-                 item.tipo_destacado === 'premium' ? 'PREMIUM' : 'DESTACADO'}
+                {getBadgeLabel(item.etiqueta_destacado, item.tipo_destacado)}
               </Text>
             </View>
           )}

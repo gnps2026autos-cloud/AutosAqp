@@ -86,3 +86,12 @@ export const AREQUIPA_REGION = {
   latitudeDelta: 0.3,
   longitudeDelta: 0.3,
 };
+
+// Etiquetas para anuncios destacados
+export const ETIQUETAS_DESTACADO = [
+  { value: 'oferta', label: 'Oferta', icon: 'pricetag', color: '#FF6B35' },
+  { value: 'ocasion', label: 'Ocasión', icon: 'flash', color: '#E91E63' },
+  { value: 'por_viaje', label: 'Por Viaje', icon: 'airplane', color: '#9C27B0' },
+  { value: 'destacado', label: 'Destacados', icon: 'star', color: '#FFD700' },
+  { value: 'super_anuncio', label: 'Super Anuncio', icon: 'megaphone', color: '#00BCD4' },
+];

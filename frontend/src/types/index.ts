@@ -35,6 +35,7 @@ export interface Vehicle {
   es_destacado?: boolean;
   fecha_destacado_hasta?: string;
   tipo_destacado?: string;
+  etiqueta_destacado?: string;
   estado: string;
   created_at: string;
   updated_at: string;

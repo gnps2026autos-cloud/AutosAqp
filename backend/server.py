@@ -74,6 +74,7 @@ class Vehicle(BaseModel):
     es_destacado: bool = False  # Si el anuncio es destacado/premium
     fecha_destacado_hasta: Optional[datetime] = None  # Hasta cuando está destacado
     tipo_destacado: Optional[str] = None  # "basico" | "premium" | "ultra"
+    etiqueta_destacado: Optional[str] = None  # "oferta" | "ocasion" | "por_viaje" | "destacado" | "super_anuncio"
     # Metadata
     estado: str = "activo"  # "activo", "vendido", "inactivo"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -531,6 +532,9 @@ class Payment(BaseModel):
 class PromoteVehicleRequest(BaseModel):
     tipo_pago: str  # "destacado_10d" | "priorizado_5d_7d"
     numero_operacion: str  # Número de operación Yape
+    etiqueta: Optional[str] = "destacado"  # "oferta" | "ocasion" | "por_viaje" | "destacado" | "super_anuncio"
+
+ETIQUETAS_VALIDAS = ["oferta", "ocasion", "por_viaje", "destacado", "super_anuncio"]
 
 class VerifyPaymentRequest(BaseModel):
     estado: str  # "verificado" | "rechazado"
@@ -602,6 +606,11 @@ async def promote_vehicle(
     if not promote_data.numero_operacion or len(promote_data.numero_operacion.strip()) < 3:
         raise HTTPException(status_code=400, detail="Número de operación Yape inválido")
     
+    # Validar etiqueta
+    etiqueta = promote_data.etiqueta or "destacado"
+    if etiqueta not in ETIQUETAS_VALIDAS:
+        raise HTTPException(status_code=400, detail=f"Etiqueta inválida. Opciones: {', '.join(ETIQUETAS_VALIDAS)}")
+    
     # Verificar que el número de operación no se haya usado antes
     existing_payment = await db.payments.find_one(
         {"numero_operacion": promote_data.numero_operacion.strip()},
@@ -657,6 +666,7 @@ async def promote_vehicle(
                 "es_destacado": True,
                 "tipo_destacado": final_tipo,
                 "fecha_destacado_hasta": fecha_hasta,
+                "etiqueta_destacado": etiqueta,
                 "updated_at": now
             }
         }
@@ -779,6 +789,7 @@ async def verify_payment(
                     "es_destacado": False,
                     "tipo_destacado": None,
                     "fecha_destacado_hasta": None,
+                    "etiqueta_destacado": None,
                     "updated_at": now
                 }
             }

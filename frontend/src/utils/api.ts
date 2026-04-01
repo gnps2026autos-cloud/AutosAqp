@@ -91,11 +91,12 @@ export const paymentsAPI = {
     const response = await api.get('/payments/config');
     return response.data;
   },
-  promote: async (vehicleId: string, tipoPago: string, numeroOperacion: string, token?: string): Promise<any> => {
+  promote: async (vehicleId: string, tipoPago: string, numeroOperacion: string, token?: string, etiqueta?: string): Promise<any> => {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
     const response = await api.post(`/vehicles/${vehicleId}/promote`, {
       tipo_pago: tipoPago,
       numero_operacion: numeroOperacion,
+      etiqueta: etiqueta || 'destacado',
     }, { headers });
     return response.data;
   },
