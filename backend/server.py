@@ -45,7 +45,7 @@ class UserSession(BaseModel):
 class Vehicle(BaseModel):
     vehicle_id: str
     user_id: str
-    category: str  # "auto", "moto", "camion"
+    category: str  # "auto", "camioneta", "suv", "pickup", "van", "minivan", "moto", "scooter", "remolque", "casa_rodante", "camion", "bus", "omnibus", "maquinaria", "otro"
     marca: str
     modelo: str
     anio: int
@@ -68,6 +68,8 @@ class Vehicle(BaseModel):
     foto_costado_izq: str
     foto_costado_der: str
     foto_interior: str  # tablero con llaves
+    # Enlace a galería de fotos (opcional)
+    galeria_fotos_url: Optional[str] = None
     # Metadata
     estado: str = "activo"  # "activo", "vendido", "inactivo"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -95,6 +97,7 @@ class VehicleCreate(BaseModel):
     foto_costado_izq: str
     foto_costado_der: str
     foto_interior: str
+    galeria_fotos_url: Optional[str] = None
 
 class VehicleUpdate(BaseModel):
     category: Optional[str] = None
@@ -118,6 +121,7 @@ class VehicleUpdate(BaseModel):
     foto_costado_izq: Optional[str] = None
     foto_costado_der: Optional[str] = None
     foto_interior: Optional[str] = None
+    galeria_fotos_url: Optional[str] = None
     estado: Optional[str] = None
 
 class Favorite(BaseModel):

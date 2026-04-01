@@ -42,6 +42,7 @@ interface FormData {
   descripcion: string;
   ciudad: string;
   distrito: string;
+  galeria_fotos_url: string;
   foto_frente: string;
   foto_atras: string;
   foto_costado_izq: string;
@@ -70,6 +71,7 @@ export default function AddVehicleScreen() {
     descripcion: '',
     ciudad: 'Arequipa',
     distrito: '',
+    galeria_fotos_url: '',
     foto_frente: '',
     foto_atras: '',
     foto_costado_izq: '',
@@ -105,39 +107,77 @@ export default function AddVehicleScreen() {
   };
 
   const validateForm = (): boolean => {
-    if (!formData.category || !formData.marca || !formData.modelo) {
-      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+    // Validar campos obligatorios
+    if (!formData.category) {
+      Alert.alert('Campo requerido', 'Por favor selecciona una categoría');
+      return false;
+    }
+
+    if (!formData.marca || !formData.marca.trim()) {
+      Alert.alert('Campo requerido', 'Por favor ingresa la marca del vehículo');
+      return false;
+    }
+
+    if (!formData.modelo || !formData.modelo.trim()) {
+      Alert.alert('Campo requerido', 'Por favor ingresa el modelo del vehículo');
       return false;
     }
 
     if (!formData.anio || parseInt(formData.anio) < 1900 || parseInt(formData.anio) > new Date().getFullYear() + 1) {
-      Alert.alert('Error', 'Por favor ingresa un año válido');
+      Alert.alert('Año inválido', 'Por favor ingresa un año válido entre 1900 y ' + (new Date().getFullYear() + 1));
       return false;
     }
 
     if (!formData.precio || parseFloat(formData.precio) <= 0) {
-      Alert.alert('Error', 'Por favor ingresa un precio válido');
+      Alert.alert('Precio inválido', 'Por favor ingresa un precio válido mayor a 0');
       return false;
     }
 
     if (!formData.kilometraje || parseInt(formData.kilometraje) < 0) {
-      Alert.alert('Error', 'Por favor ingresa un kilometraje válido');
+      Alert.alert('Kilometraje inválido', 'Por favor ingresa un kilometraje válido');
+      return false;
+    }
+
+    if (!formData.color) {
+      Alert.alert('Campo requerido', 'Por favor selecciona un color');
+      return false;
+    }
+
+    if (!formData.tipo_combustible) {
+      Alert.alert('Campo requerido', 'Por favor selecciona el tipo de combustible');
+      return false;
+    }
+
+    if (!formData.transmision) {
+      Alert.alert('Campo requerido', 'Por favor selecciona el tipo de transmisión');
       return false;
     }
 
     if (!formData.num_puertas || parseInt(formData.num_puertas) < 1) {
-      Alert.alert('Error', 'Por favor ingresa un número de puertas válido');
+      Alert.alert('Número de puertas inválido', 'Por favor ingresa un número de puertas válido');
       return false;
     }
 
+    if (!formData.placa || !formData.placa.trim()) {
+      Alert.alert('Campo requerido', 'Por favor ingresa la placa del vehículo');
+      return false;
+    }
+
+    if (!formData.descripcion || !formData.descripcion.trim()) {
+      Alert.alert('Campo requerido', 'Por favor ingresa una descripción del vehículo');
+      return false;
+    }
+
+    // Validar las 5 fotos obligatorias
     if (!formData.foto_frente || !formData.foto_atras || !formData.foto_costado_izq || 
         !formData.foto_costado_der || !formData.foto_interior) {
-      Alert.alert('Error', 'Por favor agrega las 5 fotos obligatorias');
+      Alert.alert('Fotos incompletas', 'Por favor agrega las 5 fotos obligatorias del vehículo');
       return false;
     }
 
+    // Validar ubicación
     if (!location) {
-      Alert.alert('Error', 'Por favor obtén tu ubicación');
+      Alert.alert('Ubicación requerida', 'Por favor obtén tu ubicación usando el botón');
       return false;
     }
 
@@ -172,6 +212,7 @@ export default function AddVehicleScreen() {
         foto_costado_izq: formData.foto_costado_izq,
         foto_costado_der: formData.foto_costado_der,
         foto_interior: formData.foto_interior,
+        galeria_fotos_url: formData.galeria_fotos_url || undefined,
       };
 
       await vehiclesAPI.create(vehicleData, sessionToken || undefined);
@@ -383,7 +424,7 @@ export default function AddVehicleScreen() {
             autoCapitalize="characters"
           />
 
-          <Text style={styles.label}>Descripción</Text>
+          <Text style={styles.label}>Descripción *</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="Describe las características y estado del vehículo..."
@@ -399,6 +440,16 @@ export default function AddVehicleScreen() {
             placeholder="Ej: Cayma, Yanahuara..."
             value={formData.distrito}
             onChangeText={(text) => setFormData({ ...formData, distrito: text })}
+          />
+
+          <Text style={styles.label}>Enlace a Galería de Fotos (Opcional)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="https://drive.google.com/..."
+            value={formData.galeria_fotos_url}
+            onChangeText={(text) => setFormData({ ...formData, galeria_fotos_url: text })}
+            keyboardType="url"
+            autoCapitalize="none"
           />
 
           {/* Location */}

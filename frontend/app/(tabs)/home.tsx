@@ -19,7 +19,7 @@ import { useRouter } from 'expo-router';
 import { Vehicle, FilterOptions } from '../../src/types';
 import { vehiclesAPI } from '../../src/utils/api';
 import { formatPrice, formatKm } from '../../src/utils/imageHelper';
-import { SECTIONS, CATEGORIES, ALL_CATEGORIES, FUEL_TYPES, TRANSMISSIONS } from '../../src/constants';
+import { SECTIONS, CATEGORIES, ALL_CATEGORIES, FUEL_TYPES, TRANSMISSIONS, COLORS_THEME } from '../../src/constants';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2; // 2 columns with padding
@@ -117,12 +117,15 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Text style={styles.logo}>AutoArequipa</Text>
+          <View>
+            <Text style={styles.logo}>AQP-Autos</Text>
+            <Text style={styles.logoSubtitle}>by GNPS</Text>
+          </View>
           <TouchableOpacity
             onPress={() => setShowFilters(true)}
             style={styles.filterIconButton}
           >
-            <Ionicons name="options-outline" size={24} color="#13CE66" />
+            <Ionicons name="options-outline" size={24} color={COLORS_THEME.secondary} />
           </TouchableOpacity>
         </View>
 
@@ -383,7 +386,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
   },
   header: {
-    backgroundColor: '#fff',
+    backgroundColor: COLORS_THEME.background,
     paddingTop: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#E8E8E8',
@@ -398,7 +401,13 @@ const styles = StyleSheet.create({
   logo: {
     fontSize: 26,
     fontWeight: 'bold',
-    color: '#13CE66',
+    color: COLORS_THEME.primary,
+  },
+  logoSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS_THEME.secondary,
+    marginTop: -2,
   },
   filterIconButton: {
     padding: 8,
@@ -440,7 +449,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tabActive: {
-    backgroundColor: '#E8F7EF',
+    backgroundColor: '#E0F7FA',
+    borderWidth: 2,
+    borderColor: COLORS_THEME.primary,
   },
   tabText: {
     fontSize: 14,
@@ -448,7 +459,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   tabTextActive: {
-    color: '#13CE66',
+    color: COLORS_THEME.primary,
   },
   loadingContainer: {
     flex: 1,
@@ -464,7 +475,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width: CARD_WIDTH,
-    backgroundColor: '#fff',
+    backgroundColor: COLORS_THEME.background,
     borderRadius: 12,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -485,7 +496,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 8,
     left: 8,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: COLORS_THEME.secondary,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
@@ -548,7 +559,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: COLORS_THEME.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '85%',
@@ -564,7 +575,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#1a1a1a',
+    color: COLORS_THEME.primary,
   },
   filtersScroll: {
     padding: 20,
@@ -587,11 +598,11 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1.5,
     borderColor: '#E0E0E0',
-    backgroundColor: '#fff',
+    backgroundColor: COLORS_THEME.background,
   },
   filterChipActive: {
-    backgroundColor: '#13CE66',
-    borderColor: '#13CE66',
+    backgroundColor: COLORS_THEME.primary,
+    borderColor: COLORS_THEME.primary,
   },
   filterChipText: {
     fontSize: 14,
@@ -599,7 +610,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   filterChipTextActive: {
-    color: '#fff',
+    color: COLORS_THEME.background,
     fontWeight: '600',
   },
   rangeInputs: {
@@ -634,24 +645,24 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#13CE66',
+    borderColor: COLORS_THEME.secondary,
     alignItems: 'center',
   },
   clearButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#13CE66',
+    color: COLORS_THEME.secondary,
   },
   applyButton: {
     flex: 1,
     paddingVertical: 16,
     borderRadius: 12,
-    backgroundColor: '#13CE66',
+    backgroundColor: COLORS_THEME.primary,
     alignItems: 'center',
   },
   applyButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fff',
+    color: COLORS_THEME.background,
   },
 });

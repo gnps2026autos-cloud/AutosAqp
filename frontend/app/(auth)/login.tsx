@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
+import { COLORS_THEME } from '../../src/constants';
 
 export default function LoginScreen() {
   const handleGoogleLogin = async () => {
@@ -29,10 +30,11 @@ export default function LoginScreen() {
         {/* Logo/Icon */}
         <View style={styles.logoContainer}>
           <View style={styles.iconCircle}>
-            <Ionicons name="car-sport" size={64} color="#13CE66" />
+            <Ionicons name="car-sport" size={64} color={COLORS_THEME.primary} />
           </View>
-          <Text style={styles.title}>AutoArequipa</Text>
-          <Text style={styles.subtitle}>Compra y vende vehículos en Arequipa</Text>
+          <Text style={styles.title}>AQP-Autos</Text>
+          <Text style={styles.subtitle}>by GNPS</Text>
+          <Text style={styles.description}>Compra y vende vehículos en Arequipa</Text>
         </View>
 
         {/* Login Button */}
@@ -58,7 +60,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: COLORS_THEME.background,
   },
   content: {
     flex: 1,
@@ -74,21 +76,29 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#E8F7EF',
+    backgroundColor: '#E0F7FA',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
+    borderWidth: 3,
+    borderColor: COLORS_THEME.primary,
   },
   title: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: 'bold',
-    color: '#13CE66',
+    color: COLORS_THEME.primary,
     marginTop: 8,
   },
   subtitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: COLORS_THEME.secondary,
+    marginTop: 4,
+  },
+  description: {
     fontSize: 16,
-    color: '#666',
-    marginTop: 8,
+    color: COLORS_THEME.textSecondary,
+    marginTop: 12,
     textAlign: 'center',
   },
   buttonContainer: {
@@ -98,11 +108,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#13CE66',
+    backgroundColor: COLORS_THEME.primary,
     paddingVertical: 16,
     borderRadius: 12,
     gap: 12,
-    shadowColor: '#13CE66',
+    shadowColor: COLORS_THEME.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

@@ -12,6 +12,8 @@ export const CATEGORIES = {
     { label: 'Camioneta', value: 'camioneta' },
     { label: 'SUV', value: 'suv' },
     { label: 'Pickup', value: 'pickup' },
+    { label: 'Van', value: 'van' },
+    { label: 'Mini Van', value: 'minivan' },
   ],
   motos: [
     { label: 'Moto', value: 'moto' },
@@ -22,6 +24,7 @@ export const CATEGORIES = {
   otros: [
     { label: 'Camión', value: 'camion' },
     { label: 'Bus', value: 'bus' },
+    { label: 'Ómnibus', value: 'omnibus' },
     { label: 'Maquinaria', value: 'maquinaria' },
     { label: 'Otro', value: 'otro' },
   ],
@@ -36,16 +39,32 @@ export const ALL_CATEGORIES = [
 
 export const FUEL_TYPES = [
   { label: 'Gasolina', value: 'gasolina' },
+  { label: 'Gasolina-GLP', value: 'gasolina_glp' },
+  { label: 'Gasolina-GNV', value: 'gasolina_gnv' },
   { label: 'Diesel', value: 'diesel' },
+  { label: 'Diesel-Urea', value: 'diesel_urea' },
   { label: 'Eléctrico', value: 'electrico' },
   { label: 'Híbrido', value: 'hibrido' },
   { label: 'Gas', value: 'gas' },
+  { label: 'Otros', value: 'otros' },
 ];
 
 export const TRANSMISSIONS = [
   { label: 'Manual', value: 'manual' },
   { label: 'Automática', value: 'automatica' },
 ];
+
+// Colores del tema
+export const COLORS_THEME = {
+  primary: '#00BCD4',      // Azul turquesa
+  secondary: '#FF6B35',    // Naranja
+  background: '#FFFFFF',   // Blanco
+  text: '#00BCD4',         // Azul turquesa para textos principales
+  textSecondary: '#666666', // Gris para textos secundarios
+  border: '#E0E0E0',       // Gris claro para bordes
+  success: '#4CAF50',      // Verde para éxito
+  error: '#F44336',        // Rojo para errores
+};
 
 export const COLORS = [
   'Blanco', 'Negro', 'Gris', 'Plata', 'Rojo', 'Azul', 'Verde', 
