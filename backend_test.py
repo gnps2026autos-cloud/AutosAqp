@@ -485,6 +485,323 @@ def test_favorites_endpoints(results: TestResults, vehicle_id: Optional[str]):
     except Exception as e:
         results.add_fail("GET /favorites without auth", str(e))
 
+def test_payment_system(results: TestResults, vehicle_id: Optional[str]):
+    """Test payment system endpoints"""
+    print("\n🔍 Testing Payment System...")
+    
+    if not vehicle_id:
+        results.add_fail("Payment tests", "No vehicle ID available for testing")
+        return None
+    
+    payment_id = None
+    
+    # Test GET /api/payments/config (public endpoint)
+    try:
+        response = make_request("GET", "/payments/config")
+        if response.status_code == 200:
+            config = response.json()
+            required_fields = ["yape_numero", "yape_titular", "planes"]
+            if all(field in config for field in required_fields):
+                planes = config.get("planes", {})
+                if "destacado_10d" in planes and "priorizado_5d_7d" in planes:
+                    destacado = planes["destacado_10d"]
+                    priorizado = planes["priorizado_5d_7d"]
+                    if (destacado.get("monto") == 10.0 and destacado.get("dias") == 10 and
+                        priorizado.get("monto") == 5.0 and priorizado.get("dias") == 12):
+                        results.add_pass("GET /payments/config")
+                    else:
+                        results.add_fail("GET /payments/config", f"Invalid plan details: {planes}")
+                else:
+                    results.add_fail("GET /payments/config", f"Missing required plans: {planes}")
+            else:
+                results.add_fail("GET /payments/config", f"Missing required fields: {config}")
+        else:
+            results.add_fail("GET /payments/config", f"Status code: {response.status_code}")
+    except Exception as e:
+        results.add_fail("GET /payments/config", str(e))
+    
+    # Test POST /api/vehicles/{vehicle_id}/promote with valid data
+    try:
+        promote_data = {
+            "tipo_pago": "destacado_10d",
+            "numero_operacion": "12345678"
+        }
+        response = make_request("POST", f"/vehicles/{vehicle_id}/promote", token=TEST_USER_1_TOKEN, data=promote_data)
+        if response.status_code == 200:
+            data = response.json()
+            if "payment_id" in data and data.get("estado") == "aprobado":
+                payment_id = data.get("payment_id")
+                results.add_pass("POST /vehicles/{id}/promote (valid data)")
+            else:
+                results.add_fail("POST /vehicles/{id}/promote (valid data)", f"Invalid response: {data}")
+        else:
+            results.add_fail("POST /vehicles/{id}/promote (valid data)", f"Status code: {response.status_code}, Response: {response.text}")
+    except Exception as e:
+        results.add_fail("POST /vehicles/{id}/promote (valid data)", str(e))
+    
+    # Test POST /api/vehicles/{vehicle_id}/promote with duplicate operation number
+    try:
+        promote_data = {
+            "tipo_pago": "priorizado_5d_7d",
+            "numero_operacion": "12345678"  # Same as above
+        }
+        response = make_request("POST", f"/vehicles/{vehicle_id}/promote", token=TEST_USER_1_TOKEN, data=promote_data)
+        if response.status_code == 400:
+            results.add_pass("POST /vehicles/{id}/promote (duplicate operation number, 400 expected)")
+        else:
+            results.add_fail("POST /vehicles/{id}/promote (duplicate operation number)", f"Expected 400, got {response.status_code}")
+    except Exception as e:
+        results.add_fail("POST /vehicles/{id}/promote (duplicate operation number)", str(e))
+    
+    # Test POST /api/vehicles/{vehicle_id}/promote with invalid tipo_pago
+    try:
+        promote_data = {
+            "tipo_pago": "invalid_plan",
+            "numero_operacion": "87654321"
+        }
+        response = make_request("POST", f"/vehicles/{vehicle_id}/promote", token=TEST_USER_1_TOKEN, data=promote_data)
+        if response.status_code == 400:
+            results.add_pass("POST /vehicles/{id}/promote (invalid tipo_pago, 400 expected)")
+        else:
+            results.add_fail("POST /vehicles/{id}/promote (invalid tipo_pago)", f"Expected 400, got {response.status_code}")
+    except Exception as e:
+        results.add_fail("POST /vehicles/{id}/promote (invalid tipo_pago)", str(e))
+    
+    # Test POST /api/vehicles/{vehicle_id}/promote with empty operation number
+    try:
+        promote_data = {
+            "tipo_pago": "destacado_10d",
+            "numero_operacion": ""
+        }
+        response = make_request("POST", f"/vehicles/{vehicle_id}/promote", token=TEST_USER_1_TOKEN, data=promote_data)
+        if response.status_code == 400:
+            results.add_pass("POST /vehicles/{id}/promote (empty operation number, 400 expected)")
+        else:
+            results.add_fail("POST /vehicles/{id}/promote (empty operation number)", f"Expected 400, got {response.status_code}")
+    except Exception as e:
+        results.add_fail("POST /vehicles/{id}/promote (empty operation number)", str(e))
+    
+    # Test POST /api/vehicles/{vehicle_id}/promote with short operation number
+    try:
+        promote_data = {
+            "tipo_pago": "destacado_10d",
+            "numero_operacion": "12"
+        }
+        response = make_request("POST", f"/vehicles/{vehicle_id}/promote", token=TEST_USER_1_TOKEN, data=promote_data)
+        if response.status_code == 400:
+            results.add_pass("POST /vehicles/{id}/promote (short operation number, 400 expected)")
+        else:
+            results.add_fail("POST /vehicles/{id}/promote (short operation number)", f"Expected 400, got {response.status_code}")
+    except Exception as e:
+        results.add_fail("POST /vehicles/{id}/promote (short operation number)", str(e))
+    
+    # Test POST /api/vehicles/{vehicle_id}/promote without auth
+    try:
+        promote_data = {
+            "tipo_pago": "destacado_10d",
+            "numero_operacion": "99999999"
+        }
+        response = make_request("POST", f"/vehicles/{vehicle_id}/promote", data=promote_data)
+        if response.status_code == 401:
+            results.add_pass("POST /vehicles/{id}/promote without auth (401 expected)")
+        else:
+            results.add_fail("POST /vehicles/{id}/promote without auth", f"Expected 401, got {response.status_code}")
+    except Exception as e:
+        results.add_fail("POST /vehicles/{id}/promote without auth", str(e))
+    
+    # Test POST /api/vehicles/{vehicle_id}/promote with non-owner
+    try:
+        promote_data = {
+            "tipo_pago": "destacado_10d",
+            "numero_operacion": "88888888"
+        }
+        response = make_request("POST", f"/vehicles/{vehicle_id}/promote", token=TEST_USER_2_TOKEN, data=promote_data)
+        if response.status_code == 403:
+            results.add_pass("POST /vehicles/{id}/promote (non-owner, 403 expected)")
+        else:
+            results.add_fail("POST /vehicles/{id}/promote (non-owner)", f"Expected 403, got {response.status_code}")
+    except Exception as e:
+        results.add_fail("POST /vehicles/{id}/promote (non-owner)", str(e))
+    
+    # Test POST /api/vehicles/{nonexistent}/promote
+    try:
+        promote_data = {
+            "tipo_pago": "destacado_10d",
+            "numero_operacion": "77777777"
+        }
+        response = make_request("POST", "/vehicles/nonexistent/promote", token=TEST_USER_1_TOKEN, data=promote_data)
+        if response.status_code == 404:
+            results.add_pass("POST /vehicles/{nonexistent}/promote (404 expected)")
+        else:
+            results.add_fail("POST /vehicles/{nonexistent}/promote", f"Expected 404, got {response.status_code}")
+    except Exception as e:
+        results.add_fail("POST /vehicles/{nonexistent}/promote", str(e))
+    
+    return payment_id
+
+def test_admin_panel(results: TestResults, payment_id: Optional[str]):
+    """Test admin panel endpoints"""
+    print("\n🔍 Testing Admin Panel...")
+    
+    # Test POST /api/admin/login with correct PIN
+    try:
+        login_data = {"pin": "1234"}
+        response = make_request("POST", "/admin/login", data=login_data)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("admin") is True:
+                results.add_pass("POST /admin/login (correct PIN)")
+            else:
+                results.add_fail("POST /admin/login (correct PIN)", f"Invalid response: {data}")
+        else:
+            results.add_fail("POST /admin/login (correct PIN)", f"Status code: {response.status_code}, Response: {response.text}")
+    except Exception as e:
+        results.add_fail("POST /admin/login (correct PIN)", str(e))
+    
+    # Test POST /api/admin/login with incorrect PIN
+    try:
+        login_data = {"pin": "wrong"}
+        response = make_request("POST", "/admin/login", data=login_data)
+        if response.status_code == 403:
+            results.add_pass("POST /admin/login (incorrect PIN, 403 expected)")
+        else:
+            results.add_fail("POST /admin/login (incorrect PIN)", f"Expected 403, got {response.status_code}")
+    except Exception as e:
+        results.add_fail("POST /admin/login (incorrect PIN)", str(e))
+    
+    # Test GET /api/admin/payments with correct PIN
+    try:
+        headers = {"X-Admin-Pin": "1234"}
+        url = f"{BASE_URL}/admin/payments"
+        response = requests.get(url, headers=headers, timeout=30)
+        if response.status_code == 200:
+            data = response.json()
+            if "payments" in data and "total" in data:
+                payments = data.get("payments", [])
+                if isinstance(payments, list):
+                    results.add_pass("GET /admin/payments (correct PIN)")
+                else:
+                    results.add_fail("GET /admin/payments (correct PIN)", f"Invalid payments format: {data}")
+            else:
+                results.add_fail("GET /admin/payments (correct PIN)", f"Missing required fields: {data}")
+        else:
+            results.add_fail("GET /admin/payments (correct PIN)", f"Status code: {response.status_code}, Response: {response.text}")
+    except Exception as e:
+        results.add_fail("GET /admin/payments (correct PIN)", str(e))
+    
+    # Test GET /api/admin/payments with incorrect PIN
+    try:
+        headers = {"X-Admin-Pin": "wrong"}
+        url = f"{BASE_URL}/admin/payments"
+        response = requests.get(url, headers=headers, timeout=30)
+        if response.status_code == 403:
+            results.add_pass("GET /admin/payments (incorrect PIN, 403 expected)")
+        else:
+            results.add_fail("GET /admin/payments (incorrect PIN)", f"Expected 403, got {response.status_code}")
+    except Exception as e:
+        results.add_fail("GET /admin/payments (incorrect PIN)", str(e))
+    
+    # Test GET /api/admin/payments without PIN
+    try:
+        url = f"{BASE_URL}/admin/payments"
+        response = requests.get(url, timeout=30)
+        if response.status_code == 403:
+            results.add_pass("GET /admin/payments (no PIN, 403 expected)")
+        else:
+            results.add_fail("GET /admin/payments (no PIN)", f"Expected 403, got {response.status_code}")
+    except Exception as e:
+        results.add_fail("GET /admin/payments (no PIN)", str(e))
+    
+    # Test GET /api/admin/payments with estado filter
+    try:
+        headers = {"X-Admin-Pin": "1234"}
+        url = f"{BASE_URL}/admin/payments?estado=aprobado"
+        response = requests.get(url, headers=headers, timeout=30)
+        if response.status_code == 200:
+            data = response.json()
+            if "payments" in data:
+                results.add_pass("GET /admin/payments (with estado filter)")
+            else:
+                results.add_fail("GET /admin/payments (with estado filter)", f"Invalid response: {data}")
+        else:
+            results.add_fail("GET /admin/payments (with estado filter)", f"Status code: {response.status_code}")
+    except Exception as e:
+        results.add_fail("GET /admin/payments (with estado filter)", str(e))
+    
+    if payment_id:
+        # Test PUT /api/admin/payments/{payment_id}/verify with correct PIN (verificado)
+        try:
+            headers = {"X-Admin-Pin": "1234", "Content-Type": "application/json"}
+            verify_data = {"estado": "verificado"}
+            url = f"{BASE_URL}/admin/payments/{payment_id}/verify"
+            response = requests.put(url, headers=headers, json=verify_data, timeout=30)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("estado") == "verificado":
+                    results.add_pass("PUT /admin/payments/{id}/verify (verificado)")
+                else:
+                    results.add_fail("PUT /admin/payments/{id}/verify (verificado)", f"Invalid response: {data}")
+            else:
+                results.add_fail("PUT /admin/payments/{id}/verify (verificado)", f"Status code: {response.status_code}, Response: {response.text}")
+        except Exception as e:
+            results.add_fail("PUT /admin/payments/{id}/verify (verificado)", str(e))
+        
+        # Test PUT /api/admin/payments/{payment_id}/verify with correct PIN (rechazado)
+        try:
+            headers = {"X-Admin-Pin": "1234", "Content-Type": "application/json"}
+            verify_data = {"estado": "rechazado"}
+            url = f"{BASE_URL}/admin/payments/{payment_id}/verify"
+            response = requests.put(url, headers=headers, json=verify_data, timeout=30)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("estado") == "rechazado":
+                    results.add_pass("PUT /admin/payments/{id}/verify (rechazado)")
+                else:
+                    results.add_fail("PUT /admin/payments/{id}/verify (rechazado)", f"Invalid response: {data}")
+            else:
+                results.add_fail("PUT /admin/payments/{id}/verify (rechazado)", f"Status code: {response.status_code}, Response: {response.text}")
+        except Exception as e:
+            results.add_fail("PUT /admin/payments/{id}/verify (rechazado)", str(e))
+        
+        # Test PUT /api/admin/payments/{payment_id}/verify with incorrect PIN
+        try:
+            headers = {"X-Admin-Pin": "wrong", "Content-Type": "application/json"}
+            verify_data = {"estado": "verificado"}
+            url = f"{BASE_URL}/admin/payments/{payment_id}/verify"
+            response = requests.put(url, headers=headers, json=verify_data, timeout=30)
+            if response.status_code == 403:
+                results.add_pass("PUT /admin/payments/{id}/verify (incorrect PIN, 403 expected)")
+            else:
+                results.add_fail("PUT /admin/payments/{id}/verify (incorrect PIN)", f"Expected 403, got {response.status_code}")
+        except Exception as e:
+            results.add_fail("PUT /admin/payments/{id}/verify (incorrect PIN)", str(e))
+        
+        # Test PUT /api/admin/payments/{payment_id}/verify with invalid estado
+        try:
+            headers = {"X-Admin-Pin": "1234", "Content-Type": "application/json"}
+            verify_data = {"estado": "invalid_estado"}
+            url = f"{BASE_URL}/admin/payments/{payment_id}/verify"
+            response = requests.put(url, headers=headers, json=verify_data, timeout=30)
+            if response.status_code == 400:
+                results.add_pass("PUT /admin/payments/{id}/verify (invalid estado, 400 expected)")
+            else:
+                results.add_fail("PUT /admin/payments/{id}/verify (invalid estado)", f"Expected 400, got {response.status_code}")
+        except Exception as e:
+            results.add_fail("PUT /admin/payments/{id}/verify (invalid estado)", str(e))
+    
+    # Test PUT /api/admin/payments/{nonexistent}/verify
+    try:
+        headers = {"X-Admin-Pin": "1234", "Content-Type": "application/json"}
+        verify_data = {"estado": "verificado"}
+        url = f"{BASE_URL}/admin/payments/nonexistent/verify"
+        response = requests.put(url, headers=headers, json=verify_data, timeout=30)
+        if response.status_code == 404:
+            results.add_pass("PUT /admin/payments/{nonexistent}/verify (404 expected)")
+        else:
+            results.add_fail("PUT /admin/payments/{nonexistent}/verify", f"Expected 404, got {response.status_code}")
+    except Exception as e:
+        results.add_fail("PUT /admin/payments/{nonexistent}/verify", str(e))
+
 def test_data_validation(results: TestResults):
     """Test data validation and edge cases"""
     print("\n🔍 Testing Data Validation...")
@@ -524,6 +841,11 @@ def main():
     test_auth_endpoints(results)
     vehicle_id_1, vehicle_id_2 = test_vehicle_endpoints(results)
     test_favorites_endpoints(results, vehicle_id_1)
+    
+    # Test payment system and admin panel (NEW)
+    payment_id = test_payment_system(results, vehicle_id_1)
+    test_admin_panel(results, payment_id)
+    
     test_data_validation(results)
     
     # Print summary

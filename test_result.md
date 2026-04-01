@@ -165,6 +165,36 @@ backend:
         agent: "testing"
         comment: "✅ MONGODB MODELS WORKING: Pydantic models correctly validate required fields. Custom user_id fields working (not using MongoDB _id). All 5 photos mandatory validation working for vehicle creation. Database operations successful with proper projections excluding _id. Minor: Could add stricter validation for categories, years, and negative values."
 
+  - task: "Payment System - Yape Integration with Auto-approval"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented complete Yape payment system with: GET /api/payments/config (public config), POST /api/vehicles/{id}/promote (with tipo_pago and numero_operacion), auto-approval on submission. Two plans: destacado_10d (S/10, 10 days) and priorizado_5d_7d (S/5, 12 days). Validates unique operation numbers. Stores payment records in 'payments' collection."
+      - working: true
+        agent: "testing"
+        comment: "✅ ALL PAYMENT ENDPOINTS WORKING: GET /api/payments/config returns correct Yape config (numero: 938567871, titular: AQP-Autos, planes with destacado_10d S/10 and priorizado_5d_7d S/5). POST /api/vehicles/{id}/promote successfully promotes vehicles with auto-approval, validates unique operation numbers (rejects duplicates with 400), validates tipo_pago (rejects invalid with 400), validates operation number length (rejects empty/short with 400), requires authentication (401 without token), enforces ownership (403 for non-owners). Complete payment flow tested successfully."
+
+  - task: "Admin Panel - Payment Verification"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented admin endpoints: POST /api/admin/login (PIN auth, PIN=1234), GET /api/admin/payments (list with filters by estado, requires X-Admin-Pin header), PUT /api/admin/payments/{id}/verify (verify/reject, auto-removes featured status on reject). Admin auth via X-Admin-Pin header."
+      - working: true
+        agent: "testing"
+        comment: "✅ ALL ADMIN ENDPOINTS WORKING: POST /api/admin/login correctly validates PIN (accepts 1234, rejects wrong PIN with 403). GET /api/admin/payments requires X-Admin-Pin header (403 without/wrong PIN), returns payments array with total count, supports estado filter. PUT /api/admin/payments/{id}/verify requires X-Admin-Pin header, accepts 'verificado'/'rechazado' estados, rejects invalid estados with 400, removes featured status when payment is rejected. Complete admin flow tested successfully."
+
 frontend:
   - task: "Auth Flow - Login, Callback, Session"
     implemented: true
@@ -257,10 +287,7 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "Auth API - Google OAuth + Session Management"
-    - "Vehicles CRUD API"
-    - "Favorites API"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -268,5 +295,9 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: "MVP implementation complete with modern Wallapop-style design. Backend has auth (Google OAuth), vehicles CRUD with 5 photos in base64, favorites system. Frontend has all main screens: login, home with sections, add vehicle, details, favorites, my vehicles, profile. Ready for backend testing. Theme color: #13CE66 (green). Categorías organizadas en 3 secciones: Autos y Camionetas, Motos y Más, Otros."
+  - agent: "main"
+    message: "NEW: Implemented Yape payment system and admin panel. Backend: POST /api/vehicles/{id}/promote with tipo_pago (destacado_10d or priorizado_5d_7d) and numero_operacion (Yape operation number). Auto-approval on submission. GET /api/payments/config for public config. Admin: POST /api/admin/login (PIN=1234), GET /api/admin/payments (X-Admin-Pin header), PUT /api/admin/payments/{id}/verify. Please test: 1) Payment config endpoint, 2) Promote vehicle with valid/invalid data, 3) Duplicate operation number rejection, 4) Admin login with correct/incorrect PIN, 5) Admin payment listing and verification/rejection. Test credentials in /app/memory/test_credentials.md."
+  - agent: "testing"
+    message: "✅ PAYMENT SYSTEM & ADMIN PANEL TESTING COMPLETE: All 46 backend tests passed with 0 failures. Payment system working perfectly: GET /api/payments/config returns correct Yape config, POST /api/vehicles/{id}/promote handles all validation scenarios (duplicate operation numbers, invalid tipo_pago, auth requirements), auto-approval working. Admin panel fully functional: PIN authentication, payment listing with filters, verification/rejection with featured status management. Complete end-to-end payment flow tested successfully. All existing endpoints (auth, vehicles, favorites) continue working correctly. Only minor warnings on data validation (non-critical). System ready for production use."
 
 test_credentials: "See /app/memory/test_credentials.md for auth test accounts"

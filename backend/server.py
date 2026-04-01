@@ -7,7 +7,7 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional, Dict, Dict
+from typing import List, Optional, Dict
 import uuid
 from datetime import datetime, timezone, timedelta
 import httpx
@@ -514,9 +514,57 @@ async def get_my_vehicles(
 
 # ============= DESTACADOS/PREMIUM ENDPOINTS =============
 
+class Payment(BaseModel):
+    payment_id: str
+    vehicle_id: str
+    user_id: str
+    tipo_pago: str  # "destacado_10d" | "priorizado_5d_7d"
+    monto: float  # 10 o 5 soles
+    numero_operacion: str  # Número de operación Yape
+    estado: str = "aprobado"  # "aprobado" (auto) | "verificado" (admin) | "rechazado"
+    placa: str = ""  # Placa del vehículo para referencia rápida
+    marca_modelo: str = ""  # Marca y modelo para referencia
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    verificado_por: Optional[str] = None
+    verificado_at: Optional[datetime] = None
+
 class PromoteVehicleRequest(BaseModel):
-    tipo_destacado: str  # "basico" | "premium" | "ultra"
-    dias: int  # Número de días (7, 15, 30)
+    tipo_pago: str  # "destacado_10d" | "priorizado_5d_7d"
+    numero_operacion: str  # Número de operación Yape
+
+class VerifyPaymentRequest(BaseModel):
+    estado: str  # "verificado" | "rechazado"
+
+# Configuración de pagos Yape
+YAPE_CONFIG = {
+    "numero": "938567871",
+    "titular": "AQP-Autos",
+    "planes": {
+        "destacado_10d": {
+            "nombre": "Anuncio Destacado",
+            "descripcion": "Tu anuncio se destaca con badge especial por 10 días",
+            "dias": 10,
+            "monto": 10.00,
+            "tipo_destacado": "premium"
+        },
+        "priorizado_5d_7d": {
+            "nombre": "Priorizado + Extensión",
+            "descripcion": "Priorización por fecha de publicación 5 días + 1 semana adicional",
+            "dias": 12,  # 5 + 7
+            "monto": 5.00,
+            "tipo_destacado": "basico"
+        }
+    }
+}
+
+@api_router.get("/payments/config")
+async def get_payment_config():
+    """Obtener configuración de pagos (público)"""
+    return {
+        "yape_numero": YAPE_CONFIG["numero"],
+        "yape_titular": YAPE_CONFIG["titular"],
+        "planes": YAPE_CONFIG["planes"]
+    }
 
 @api_router.post("/vehicles/{vehicle_id}/promote")
 async def promote_vehicle(
@@ -526,11 +574,11 @@ async def promote_vehicle(
     authorization: Optional[str] = Header(None)
 ):
     """
-    Marcar vehículo como destacado (requiere pago - simulado por ahora)
-    Precios sugeridos:
-    - Básico (7 días): 10 soles
-    - Premium (15 días): 20 soles
-    - Ultra (30 días): 35 soles
+    Destacar/Priorizar vehículo con pago Yape.
+    Aprobación automática con número de operación.
+    Planes:
+    - destacado_10d: S/ 10 - Anuncio destacado por 10 días
+    - priorizado_5d_7d: S/ 5 - Priorizado 5 días + 1 semana extra
     """
     user = await get_current_user(request, authorization)
     
@@ -546,38 +594,84 @@ async def promote_vehicle(
     if vehicle["user_id"] != user.user_id:
         raise HTTPException(status_code=403, detail="No tienes permiso para destacar este vehículo")
     
-    # Validar tipo de destacado
-    if promote_data.tipo_destacado not in ["basico", "premium", "ultra"]:
-        raise HTTPException(status_code=400, detail="Tipo de destacado inválido")
+    # Validar tipo de pago
+    if promote_data.tipo_pago not in YAPE_CONFIG["planes"]:
+        raise HTTPException(status_code=400, detail="Tipo de pago inválido. Use 'destacado_10d' o 'priorizado_5d_7d'")
     
-    # Validar días
-    if promote_data.dias not in [7, 15, 30]:
-        raise HTTPException(status_code=400, detail="Días inválidos. Usa 7, 15 o 30")
+    # Validar número de operación
+    if not promote_data.numero_operacion or len(promote_data.numero_operacion.strip()) < 3:
+        raise HTTPException(status_code=400, detail="Número de operación Yape inválido")
+    
+    # Verificar que el número de operación no se haya usado antes
+    existing_payment = await db.payments.find_one(
+        {"numero_operacion": promote_data.numero_operacion.strip()},
+        {"_id": 0}
+    )
+    if existing_payment:
+        raise HTTPException(status_code=400, detail="Este número de operación ya fue utilizado")
+    
+    plan = YAPE_CONFIG["planes"][promote_data.tipo_pago]
     
     # Calcular fecha de expiración
-    fecha_hasta = datetime.now(timezone.utc) + timedelta(days=promote_data.dias)
+    now = datetime.now(timezone.utc)
     
-    # Actualizar vehículo
+    # Si ya está destacado, extender desde la fecha actual de vencimiento
+    fecha_destacado_hasta = vehicle.get("fecha_destacado_hasta")
+    if vehicle.get("es_destacado") and fecha_destacado_hasta:
+        if isinstance(fecha_destacado_hasta, str):
+            fecha_destacado_hasta = datetime.fromisoformat(fecha_destacado_hasta.replace('Z', '+00:00'))
+        if fecha_destacado_hasta.tzinfo is None:
+            fecha_destacado_hasta = fecha_destacado_hasta.replace(tzinfo=timezone.utc)
+        if fecha_destacado_hasta > now:
+            fecha_hasta = fecha_destacado_hasta + timedelta(days=plan["dias"])
+        else:
+            fecha_hasta = now + timedelta(days=plan["dias"])
+    else:
+        fecha_hasta = now + timedelta(days=plan["dias"])
+    
+    # Registrar pago - APROBACIÓN AUTOMÁTICA
+    payment_id = f"pay_{uuid.uuid4().hex[:12]}"
+    new_payment = Payment(
+        payment_id=payment_id,
+        vehicle_id=vehicle_id,
+        user_id=user.user_id,
+        tipo_pago=promote_data.tipo_pago,
+        monto=plan["monto"],
+        numero_operacion=promote_data.numero_operacion.strip(),
+        estado="aprobado",
+        placa=vehicle.get("placa", ""),
+        marca_modelo=f"{vehicle.get('marca', '')} {vehicle.get('modelo', '')}".strip()
+    )
+    await db.payments.insert_one(new_payment.model_dump())
+    
+    # Actualizar vehículo como destacado - AUTOMÁTICO
+    # Si el nuevo plan es mejor (premium > basico), actualizar tipo
+    current_tipo = vehicle.get("tipo_destacado", "")
+    new_tipo = plan["tipo_destacado"]
+    final_tipo = "premium" if (current_tipo == "premium" or new_tipo == "premium") else new_tipo
+    
     await db.vehicles.update_one(
         {"vehicle_id": vehicle_id},
         {
             "$set": {
                 "es_destacado": True,
-                "tipo_destacado": promote_data.tipo_destacado,
+                "tipo_destacado": final_tipo,
                 "fecha_destacado_hasta": fecha_hasta,
-                "updated_at": datetime.now(timezone.utc)
+                "updated_at": now
             }
         }
     )
     
-    # TODO: Aquí se integraría el sistema de pagos Yape/Plin
-    # Por ahora se marca como destacado directamente
-    
     return {
-        "message": "Vehículo destacado exitosamente",
-        "tipo": promote_data.tipo_destacado,
-        "valido_hasta": fecha_hasta,
-        "nota": "Sistema de pago en desarrollo - Por ahora gratuito"
+        "message": f"Pago registrado. {plan['nombre']} activado automáticamente.",
+        "payment_id": payment_id,
+        "plan": plan["nombre"],
+        "monto": plan["monto"],
+        "dias": plan["dias"],
+        "valido_hasta": fecha_hasta.isoformat(),
+        "numero_operacion": promote_data.numero_operacion.strip(),
+        "estado": "aprobado",
+        "nota": "Su anuncio ya está destacado. Los pagos son verificados por muestreo."
     }
 
 @api_router.get("/vehicles/featured/list")
@@ -593,11 +687,108 @@ async def get_featured_vehicles(limite: int = 20):
         },
         {"_id": 0}
     ).sort([
-        ("tipo_destacado", -1),  # ultra > premium > basico
         ("created_at", -1)
     ]).limit(limite).to_list(limite)
     
     return [Vehicle(**v) for v in vehicles]
+
+# ============= ADMIN ENDPOINTS =============
+
+ADMIN_PIN = "1234"  # PIN de administrador para acceso
+
+@api_router.post("/admin/login")
+async def admin_login(request: Request):
+    """Verificar PIN de administrador"""
+    body = await request.json()
+    pin = body.get("pin", "")
+    if pin != ADMIN_PIN:
+        raise HTTPException(status_code=403, detail="PIN de administrador incorrecto")
+    return {"message": "Acceso de administrador concedido", "admin": True}
+
+@api_router.get("/admin/payments")
+async def get_admin_payments(
+    request: Request,
+    estado: Optional[str] = None,
+    limite: int = 50,
+    skip: int = 0
+):
+    """Obtener lista de pagos para verificación de administrador"""
+    body_pin = request.headers.get("X-Admin-Pin", "")
+    if body_pin != ADMIN_PIN:
+        raise HTTPException(status_code=403, detail="Acceso de administrador requerido")
+    
+    filters: Dict = {}
+    if estado:
+        filters["estado"] = estado
+    
+    payments = await db.payments.find(
+        filters,
+        {"_id": 0}
+    ).sort("created_at", -1).skip(skip).limit(limite).to_list(limite)
+    
+    total = await db.payments.count_documents(filters)
+    
+    return {
+        "payments": payments,
+        "total": total,
+        "skip": skip,
+        "limite": limite
+    }
+
+@api_router.put("/admin/payments/{payment_id}/verify")
+async def verify_payment(
+    request: Request,
+    payment_id: str,
+    verify_data: VerifyPaymentRequest
+):
+    """Verificar o rechazar un pago (admin)"""
+    body_pin = request.headers.get("X-Admin-Pin", "")
+    if body_pin != ADMIN_PIN:
+        raise HTTPException(status_code=403, detail="Acceso de administrador requerido")
+    
+    if verify_data.estado not in ["verificado", "rechazado"]:
+        raise HTTPException(status_code=400, detail="Estado inválido. Use 'verificado' o 'rechazado'")
+    
+    payment = await db.payments.find_one(
+        {"payment_id": payment_id},
+        {"_id": 0}
+    )
+    
+    if not payment:
+        raise HTTPException(status_code=404, detail="Pago no encontrado")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Actualizar estado del pago
+    await db.payments.update_one(
+        {"payment_id": payment_id},
+        {
+            "$set": {
+                "estado": verify_data.estado,
+                "verificado_at": now
+            }
+        }
+    )
+    
+    # Si se rechaza, desactivar el destacado del vehículo
+    if verify_data.estado == "rechazado":
+        await db.vehicles.update_one(
+            {"vehicle_id": payment["vehicle_id"]},
+            {
+                "$set": {
+                    "es_destacado": False,
+                    "tipo_destacado": None,
+                    "fecha_destacado_hasta": None,
+                    "updated_at": now
+                }
+            }
+        )
+    
+    return {
+        "message": f"Pago {verify_data.estado} exitosamente",
+        "payment_id": payment_id,
+        "estado": verify_data.estado
+    }
 
 # ============= FAVORITES ENDPOINTS =============
 

@@ -85,4 +85,40 @@ export const favoritesAPI = {
   },
 };
 
+// Payments API
+export const paymentsAPI = {
+  getConfig: async (): Promise<any> => {
+    const response = await api.get('/payments/config');
+    return response.data;
+  },
+  promote: async (vehicleId: string, tipoPago: string, numeroOperacion: string, token?: string): Promise<any> => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await api.post(`/vehicles/${vehicleId}/promote`, {
+      tipo_pago: tipoPago,
+      numero_operacion: numeroOperacion,
+    }, { headers });
+    return response.data;
+  },
+};
+
+// Admin API
+export const adminAPI = {
+  login: async (pin: string): Promise<any> => {
+    const response = await api.post('/admin/login', { pin });
+    return response.data;
+  },
+  getPayments: async (pin: string, estado?: string): Promise<any> => {
+    const headers = { 'X-Admin-Pin': pin };
+    const params: any = {};
+    if (estado) params.estado = estado;
+    const response = await api.get('/admin/payments', { headers, params });
+    return response.data;
+  },
+  verifyPayment: async (pin: string, paymentId: string, estado: string): Promise<any> => {
+    const headers = { 'X-Admin-Pin': pin };
+    const response = await api.put(`/admin/payments/${paymentId}/verify`, { estado }, { headers });
+    return response.data;
+  },
+};
+
 export default api;

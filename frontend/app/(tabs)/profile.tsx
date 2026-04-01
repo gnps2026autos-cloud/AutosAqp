@@ -143,6 +143,21 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Administración</Text>
+          
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/admin' as any)}
+          >
+            <View style={styles.menuItemLeft}>
+              <Ionicons name="settings-outline" size={24} color="#FF6B35" />
+              <Text style={styles.menuItemText}>Panel de administración</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color="#ccc" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={24} color="#FF3B30" />
             <Text style={styles.logoutText}>Cerrar sesión</Text>
