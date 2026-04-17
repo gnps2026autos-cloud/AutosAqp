@@ -7,21 +7,50 @@ import {
   SafeAreaView,
   Image,
   Platform,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+import { useRouter } from 'expo-router';
 import { COLORS_THEME } from '../../src/constants';
 
 export default function LoginScreen() {
+  const router = useRouter();
+
   const handleGoogleLogin = async () => {
     try {
-      // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-      const redirectUrl = `${window.location.origin}/(auth)/auth-callback`;
-      const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-      
-      await WebBrowser.openBrowserAsync(authUrl);
+      let redirectUrl: string;
+
+      if (Platform.OS === 'web') {
+        // Web: usar window.location.origin
+        redirectUrl = `${window.location.origin}/(auth)/auth-callback`;
+        const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+        await WebBrowser.openBrowserAsync(authUrl);
+      } else {
+        // Native (Android/iOS): usar deep link del esquema de la app
+        redirectUrl = Linking.createURL('(auth)/auth-callback');
+        const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+        
+        // openAuthSessionAsync maneja el redirect de vuelta a la app
+        const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
+        
+        if (result.type === 'success' && result.url) {
+          // Extraer session_id de la URL de retorno
+          const parsed = Linking.parse(result.url);
+          const sessionId = parsed.queryParams?.session_id as string;
+          
+          if (sessionId) {
+            router.replace({
+              pathname: '/(auth)/auth-callback',
+              params: { session_id: sessionId },
+            });
+          }
+        }
+      }
     } catch (error) {
       console.error('Login error:', error);
+      Alert.alert('Error', 'No se pudo iniciar sesión. Intenta de nuevo.');
     }
   };
 
