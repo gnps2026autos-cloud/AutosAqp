@@ -13,9 +13,9 @@ const api = axios.create({
 
 // Auth API
 export const authAPI = {
-  createSession: async (sessionId: string): Promise<User> => {
+  createSession: async (sessionId: string): Promise<any> => {
     const response = await api.post('/auth/session', { session_id: sessionId });
-    return response.data;
+    return response.data;  // Devuelve user data + session_token
   },
   getMe: async (token?: string): Promise<User> => {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};

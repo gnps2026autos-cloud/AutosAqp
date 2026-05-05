@@ -267,9 +267,11 @@ async def create_session(session_data: SessionData, response: Response):
         path="/"
     )
     
-    # Return user data
+    # Return user data WITH session_token for native mobile apps
     user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
-    return User(**user_doc)
+    user_response = User(**user_doc).model_dump()
+    user_response["session_token"] = session_token
+    return user_response
 
 @api_router.get("/auth/me")
 async def get_me(request: Request, authorization: Optional[str] = Header(None)):

@@ -42,14 +42,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = async (sessionId: string) => {
     try {
-      const userData = await authAPI.createSession(sessionId);
+      const response = await authAPI.createSession(sessionId);
+      // El backend ahora devuelve session_token en el body para apps nativas
+      const sessionToken = response.session_token || `session_${Date.now()}`;
+      await AsyncStorage.setItem('session_token', sessionToken);
+      setSessionToken(sessionToken);
+      
+      // Obtener datos de usuario con el token real
+      const userData = await authAPI.getMe(sessionToken);
       setUser(userData);
-      // Note: Session token is set in httpOnly cookie by backend
-      // For mobile, we'll need to handle it differently
-      // For now, we'll use a dummy token and rely on cookies
-      const token = `mobile_session_${Date.now()}`;
-      await AsyncStorage.setItem('session_token', token);
-      setSessionToken(token);
     } catch (error) {
       console.error('Login error:', error);
       throw error;

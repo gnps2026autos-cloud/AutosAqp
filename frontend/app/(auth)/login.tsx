@@ -1,56 +1,101 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
-  Image,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
+import { useAuth } from '../../src/contexts/AuthContext';
 import { COLORS_THEME } from '../../src/constants';
+
+// Necesario para que openAuthSessionAsync funcione correctamente en Android
+WebBrowser.maybeCompleteAuthSession();
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://carsell-regional.preview.emergentagent.com';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { login } = useAuth();
+  const [loading, setLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
     try {
-      let redirectUrl: string;
+      setLoading(true);
+      
+      // SIEMPRE usar la URL HTTPS del backend como redirect
+      // El auth server solo redirige a URLs HTTPS, no a esquemas custom
+      const redirectUrl = `${BACKEND_URL}/(auth)/auth-callback`;
+      const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
 
       if (Platform.OS === 'web') {
-        // Web: usar window.location.origin
-        redirectUrl = `${window.location.origin}/(auth)/auth-callback`;
-        const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+        // Web: abrir normalmente, el browser maneja el redirect
         await WebBrowser.openBrowserAsync(authUrl);
       } else {
-        // Native (Android/iOS): usar deep link del esquema de la app
-        redirectUrl = Linking.createURL('(auth)/auth-callback');
-        const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-        
-        // openAuthSessionAsync maneja el redirect de vuelta a la app
-        const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
-        
+        // Native (Android/iOS): usar openAuthSessionAsync
+        // Esto abre el browser y detecta cuando navega a la URL de redirect
+        const result = await WebBrowser.openAuthSessionAsync(
+          authUrl,
+          redirectUrl  // Prefix para detectar el redirect
+        );
+
         if (result.type === 'success' && result.url) {
-          // Extraer session_id de la URL de retorno
-          const parsed = Linking.parse(result.url);
-          const sessionId = parsed.queryParams?.session_id as string;
+          // Extraer session_id de la URL retornada
+          const sessionId = extractSessionId(result.url);
           
           if (sessionId) {
-            router.replace({
-              pathname: '/(auth)/auth-callback',
-              params: { session_id: sessionId },
-            });
+            // Hacer login directamente con el session_id
+            await login(sessionId);
+            router.replace('/(tabs)/home');
+            return;
           }
+        }
+        
+        // Si no se obtuvo session_id, puede ser que el usuario canceló
+        if (result.type === 'cancel' || result.type === 'dismiss') {
+          console.log('Login cancelado por el usuario');
+        } else {
+          Alert.alert('Error', 'No se pudo completar el inicio de sesión. Intenta de nuevo.');
         }
       }
     } catch (error) {
       console.error('Login error:', error);
-      Alert.alert('Error', 'No se pudo iniciar sesión. Intenta de nuevo.');
+      Alert.alert('Error de conexión', 'Verifica tu conexión a internet e intenta de nuevo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Extraer session_id de la URL (puede estar en hash o query params)
+  const extractSessionId = (url: string): string | null => {
+    try {
+      // Buscar en hash fragment: ...#session_id=abc123
+      const hashMatch = url.match(/[#&?]session_id=([^&]+)/);
+      if (hashMatch) return hashMatch[1];
+
+      // Buscar en query params: ...?session_id=abc123
+      const urlObj = new URL(url);
+      const sessionId = urlObj.searchParams.get('session_id');
+      if (sessionId) return sessionId;
+
+      // Buscar en el hash como query string: ...#session_id=abc123&other=...
+      if (urlObj.hash) {
+        const hashParams = new URLSearchParams(urlObj.hash.substring(1));
+        const hashSessionId = hashParams.get('session_id');
+        if (hashSessionId) return hashSessionId;
+      }
+
+      return null;
+    } catch (e) {
+      // Fallback: regex simple
+      const match = url.match(/session_id=([^&#]+)/);
+      return match ? match[1] : null;
     }
   };
 
@@ -70,12 +115,19 @@ export default function LoginScreen() {
         {/* Login Button */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity
-            style={styles.googleButton}
+            style={[styles.googleButton, loading && styles.googleButtonDisabled]}
             onPress={handleGoogleLogin}
             activeOpacity={0.8}
+            disabled={loading}
           >
-            <Ionicons name="logo-google" size={24} color="#fff" />
-            <Text style={styles.buttonText}>Continuar con Google</Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Ionicons name="logo-google" size={24} color="#fff" />
+            )}
+            <Text style={styles.buttonText}>
+              {loading ? 'Iniciando sesión...' : 'Continuar con Google'}
+            </Text>
           </TouchableOpacity>
 
           <Text style={styles.termsText}>
@@ -147,6 +199,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
+  },
+  googleButtonDisabled: {
+    opacity: 0.7,
   },
   buttonText: {
     color: '#fff',
