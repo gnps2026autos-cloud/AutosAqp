@@ -54,29 +54,40 @@ export default function LoginScreen() {
 
           if (sessionId) {
             // Login directo - no navegar a auth-callback
-            await login(sessionId);
-            router.replace('/(tabs)/home');
-            return;
+            try {
+              await login(sessionId);
+              router.replace('/(tabs)/home');
+              return;
+            } catch (loginError: any) {
+              const errorMsg = loginError?.response?.data?.detail || 
+                             loginError?.message || 
+                             'Error desconocido al conectar con el servidor';
+              Alert.alert(
+                'Error de servidor',
+                `No se pudo conectar con el servidor:\n${errorMsg}\n\nVerifica tu conexión a internet.`
+              );
+            }
           } else {
             Alert.alert(
-              'Error',
-              'Autenticación completada pero no se recibió la sesión. Intenta de nuevo.'
+              'Error de autenticación',
+              `No se encontró el token de sesión en la respuesta.\n\nURL recibida: ${result.url.substring(0, 100)}`
             );
           }
         } else if (result.type === 'cancel' || result.type === 'dismiss') {
           // Usuario cerró el browser manualmente - no mostrar error
         } else {
           Alert.alert(
-            'Error',
-            'No se pudo completar el inicio de sesión. Verifica tu conexión a internet.'
+            'Sesión no completada',
+            `Tipo de resultado: ${result.type}\n\nIntenta de nuevo.`
           );
         }
       }
     } catch (error: any) {
       console.error('Login error:', error);
+      const errorDetail = error?.message || error?.toString() || 'Error desconocido';
       Alert.alert(
         'Error de conexión',
-        'Verifica tu conexión a internet e intenta de nuevo.'
+        `Detalle: ${errorDetail}\n\nVerifica tu conexión a internet e intenta de nuevo.`
       );
     } finally {
       setLoading(false);
