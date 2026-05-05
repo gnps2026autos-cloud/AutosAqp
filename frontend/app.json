@@ -75,9 +75,7 @@
       "router": {
         "origin": false
       },
-      "eas": {
-        "projectId": "your-project-id-here"
-      }
+      "eas": {}
     },
     "owner": "gnps",
     "runtimeVersion": {
