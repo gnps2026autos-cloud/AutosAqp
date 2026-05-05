@@ -33,6 +33,17 @@
         "WRITE_EXTERNAL_STORAGE",
         "CAMERA"
       ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "aqpautos"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "config": {
         "googleMaps": {
           "apiKey": ""

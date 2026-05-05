@@ -11,14 +11,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { COLORS_THEME } from '../../src/constants';
 
-// Necesario para que openAuthSessionAsync funcione correctamente en Android
+// CRÍTICO: Necesario para cerrar el browser en Android al recibir el redirect
 WebBrowser.maybeCompleteAuthSession();
-
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://carsell-regional.preview.emergentagent.com';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -28,74 +27,73 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     try {
       setLoading(true);
-      
-      // SIEMPRE usar la URL HTTPS del backend como redirect
-      // El auth server solo redirige a URLs HTTPS, no a esquemas custom
-      const redirectUrl = `${BACKEND_URL}/(auth)/auth-callback`;
-      const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
 
       if (Platform.OS === 'web') {
-        // Web: abrir normalmente, el browser maneja el redirect
+        // === WEB ===
+        const redirectUrl = `${window.location.origin}/(auth)/auth-callback`;
+        const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
         await WebBrowser.openBrowserAsync(authUrl);
       } else {
-        // Native (Android/iOS): usar openAuthSessionAsync
-        // Esto abre el browser y detecta cuando navega a la URL de redirect
-        const result = await WebBrowser.openAuthSessionAsync(
-          authUrl,
-          redirectUrl  // Prefix para detectar el redirect
-        );
+        // === ANDROID / iOS NATIVO ===
+        // Usar esquema personalizado: aqpautos://auth-callback
+        // Cuando auth.emergentagent.com redirige a este URL,
+        // Android intercepta el custom scheme y devuelve control a la app
+        const redirectUrl = Linking.createURL('auth-callback');
+
+        const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+
+        // openAuthSessionAsync abre Chrome Custom Tab
+        // Detecta cuando el browser intenta navegar a una URL que empieza con redirectUrl
+        // En ese momento cierra el browser y devuelve la URL completa
+        const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
 
         if (result.type === 'success' && result.url) {
-          // Extraer session_id de la URL retornada
+          // La URL viene como: aqpautos://auth-callback#session_id=xxx
+          // o: aqpautos://auth-callback?session_id=xxx
           const sessionId = extractSessionId(result.url);
-          
+
           if (sessionId) {
-            // Hacer login directamente con el session_id
+            // Login directo - no navegar a auth-callback
             await login(sessionId);
             router.replace('/(tabs)/home');
             return;
+          } else {
+            Alert.alert(
+              'Error',
+              'Autenticación completada pero no se recibió la sesión. Intenta de nuevo.'
+            );
           }
-        }
-        
-        // Si no se obtuvo session_id, puede ser que el usuario canceló
-        if (result.type === 'cancel' || result.type === 'dismiss') {
-          console.log('Login cancelado por el usuario');
+        } else if (result.type === 'cancel' || result.type === 'dismiss') {
+          // Usuario cerró el browser manualmente - no mostrar error
         } else {
-          Alert.alert('Error', 'No se pudo completar el inicio de sesión. Intenta de nuevo.');
+          Alert.alert(
+            'Error',
+            'No se pudo completar el inicio de sesión. Verifica tu conexión a internet.'
+          );
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
-      Alert.alert('Error de conexión', 'Verifica tu conexión a internet e intenta de nuevo.');
+      Alert.alert(
+        'Error de conexión',
+        'Verifica tu conexión a internet e intenta de nuevo.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // Extraer session_id de la URL (puede estar en hash o query params)
+  // Extraer session_id de la URL de retorno
   const extractSessionId = (url: string): string | null => {
     try {
-      // Buscar en hash fragment: ...#session_id=abc123
-      const hashMatch = url.match(/[#&?]session_id=([^&]+)/);
-      if (hashMatch) return hashMatch[1];
-
-      // Buscar en query params: ...?session_id=abc123
-      const urlObj = new URL(url);
-      const sessionId = urlObj.searchParams.get('session_id');
-      if (sessionId) return sessionId;
-
-      // Buscar en el hash como query string: ...#session_id=abc123&other=...
-      if (urlObj.hash) {
-        const hashParams = new URLSearchParams(urlObj.hash.substring(1));
-        const hashSessionId = hashParams.get('session_id');
-        if (hashSessionId) return hashSessionId;
+      // Regex universal: busca session_id= en cualquier parte de la URL
+      const match = url.match(/session_id=([^&#\s]+)/);
+      if (match && match[1]) {
+        return decodeURIComponent(match[1]);
       }
-
       return null;
     } catch (e) {
-      // Fallback: regex simple
-      const match = url.match(/session_id=([^&#]+)/);
-      return match ? match[1] : null;
+      return null;
     }
   };
 
