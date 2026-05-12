@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Header, Response, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -9,6 +10,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict
 import uuid
+import base64
+import re
 from datetime import datetime, timezone, timedelta
 import httpx
 
@@ -25,6 +28,132 @@ app = FastAPI()
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
+
+# ============= CONFIGURATION =============
+
+UPLOAD_ROOT = ROOT_DIR / "uploads"
+UPLOAD_VEHICLES_DIR = UPLOAD_ROOT / "vehicles"
+UPLOAD_VEHICLES_DIR.mkdir(parents=True, exist_ok=True)
+
+IMAGE_DATA_URL_RE = re.compile(r"^data:(image/(?:jpeg|jpg|png|webp));base64,(.+)$", re.IGNORECASE | re.DOTALL)
+IMAGE_EXTENSIONS = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
+MAX_IMAGE_BASE64_CHARS = int(os.environ.get("MAX_IMAGE_BASE64_CHARS", "6000000"))
+
+def get_public_base_url(request: Request) -> str:
+    """Base URL used to serve uploaded images back to the mobile app."""
+    return os.environ.get("PUBLIC_BASE_URL") or str(request.base_url).rstrip("/")
+
+def save_image_if_base64(image_value: Optional[str], vehicle_id: str, label: str, request: Request) -> Optional[str]:
+    """
+    Receives an image as a base64 data URL and stores it as a local file.
+    If the value is already an http(s) URL or an /uploads URL, it is returned as-is.
+    This keeps large image payloads out of MongoDB.
+    """
+    if not image_value:
+        return image_value
+
+    if image_value.startswith("http://") or image_value.startswith("https://") or image_value.startswith("/uploads/"):
+        return image_value
+
+    match = IMAGE_DATA_URL_RE.match(image_value.strip())
+    if not match:
+        # Keep backwards compatibility with existing URLs/paths, but reject unknown data blobs.
+        if image_value.startswith("data:"):
+            raise HTTPException(status_code=400, detail=f"Formato de imagen inválido en {label}")
+        return image_value
+
+    if len(image_value) > MAX_IMAGE_BASE64_CHARS:
+        raise HTTPException(status_code=413, detail=f"La imagen {label} es demasiado pesada")
+
+    mime_type, encoded = match.groups()
+    extension = IMAGE_EXTENSIONS.get(mime_type.lower())
+    if not extension:
+        raise HTTPException(status_code=400, detail=f"Tipo de imagen no permitido en {label}")
+
+    try:
+        image_bytes = base64.b64decode(encoded, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"No se pudo leer la imagen {label}")
+
+    filename = f"{vehicle_id}_{label}_{uuid.uuid4().hex[:10]}.{extension}"
+    file_path = UPLOAD_VEHICLES_DIR / filename
+    file_path.write_bytes(image_bytes)
+
+    return f"{get_public_base_url(request)}/uploads/vehicles/{filename}"
+
+def prepare_vehicle_images(vehicle_data: Dict, vehicle_id: str, request: Request) -> Dict:
+    image_fields = [
+        "foto_frente",
+        "foto_atras",
+        "foto_costado_izq",
+        "foto_costado_der",
+        "foto_interior",
+    ]
+
+    for field in image_fields:
+        if field in vehicle_data and vehicle_data[field]:
+            vehicle_data[field] = save_image_if_base64(vehicle_data[field], vehicle_id, field, request)
+
+    if "galeria_fotos" in vehicle_data:
+        gallery = vehicle_data.get("galeria_fotos") or []
+        vehicle_data["galeria_fotos"] = [
+            save_image_if_base64(image, vehicle_id, f"galeria_{index + 1}", request)
+            for index, image in enumerate(gallery)
+            if image
+        ]
+
+    return vehicle_data
+
+def get_admin_pin() -> str:
+    admin_pin = os.environ.get("ADMIN_PIN")
+    if not admin_pin:
+        raise HTTPException(
+            status_code=500,
+            detail="ADMIN_PIN no está configurado en el backend"
+        )
+    return admin_pin
+
+def get_yape_config() -> Dict:
+    return {
+        "numero": os.environ.get("YAPE_NUMERO", ""),
+        "titular": os.environ.get("YAPE_TITULAR", "AQP-Autos"),
+        "planes": {
+            "destacado_10d": {
+                "nombre": "Anuncio Destacado",
+                "descripcion": "Tu anuncio se destaca con badge especial por 10 días",
+                "dias": int(os.environ.get("YAPE_PLAN_DESTACADO_DIAS", "10")),
+                "monto": float(os.environ.get("YAPE_PLAN_DESTACADO_MONTO", "10.00")),
+                "tipo_destacado": "premium"
+            },
+            "priorizado_5d_7d": {
+                "nombre": "Priorizado + Extensión",
+                "descripcion": "Priorización por fecha de publicación 5 días + 1 semana adicional",
+                "dias": int(os.environ.get("YAPE_PLAN_PRIORIZADO_DIAS", "12")),
+                "monto": float(os.environ.get("YAPE_PLAN_PRIORIZADO_MONTO", "5.00")),
+                "tipo_destacado": "basico"
+            }
+        }
+    }
+
+def calculate_featured_until(vehicle: Dict, days: int, now: datetime) -> datetime:
+    current_until = vehicle.get("fecha_destacado_hasta")
+    if vehicle.get("es_destacado") and current_until:
+        if isinstance(current_until, str):
+            current_until = datetime.fromisoformat(current_until.replace("Z", "+00:00"))
+        if current_until.tzinfo is None:
+            current_until = current_until.replace(tzinfo=timezone.utc)
+        if current_until > now:
+            return current_until + timedelta(days=days)
+    return now + timedelta(days=days)
+
+def choose_featured_type(current_type: Optional[str], new_type: str) -> str:
+    priority = {"basico": 1, "premium": 2, "ultra": 3}
+    return new_type if priority.get(new_type, 0) >= priority.get(current_type or "", 0) else current_type
 
 # ============= MODELS =============
 
@@ -62,14 +191,14 @@ class Vehicle(BaseModel):
     distrito: Optional[str] = None
     latitude: float
     longitude: float
-    # Fotos en base64 (5 obligatorias)
+    # Fotos obligatorias: el frontend envía base64 y el backend guarda URLs de /uploads
     foto_frente: str
     foto_atras: str
     foto_costado_izq: str
     foto_costado_der: str
     foto_interior: str  # tablero con llaves
     # Galería de fotos adicionales (opcional)
-    galeria_fotos: Optional[List[str]] = []  # Array de fotos en base64
+    galeria_fotos: Optional[List[str]] = []  # URLs de fotos adicionales
     # Sistema de destacados/premium
     es_destacado: bool = False  # Si el anuncio es destacado/premium
     fecha_destacado_hasta: Optional[datetime] = None  # Hasta cuando está destacado
@@ -79,6 +208,10 @@ class Vehicle(BaseModel):
     estado: str = "activo"  # "activo", "vendido", "inactivo"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class VehicleDetail(Vehicle):
+    seller_name: Optional[str] = None
+    seller_phone: Optional[str] = None
 
 class VehicleCreate(BaseModel):
     category: str
@@ -280,9 +413,16 @@ async def get_me(request: Request, authorization: Optional[str] = Header(None)):
     return user
 
 @api_router.post("/auth/logout")
-async def logout(request: Request, response: Response):
-    """Logout current user"""
+async def logout(
+    request: Request,
+    response: Response,
+    authorization: Optional[str] = Header(None)
+):
+    """Logout current user from cookie or Bearer token."""
     session_token = request.cookies.get("session_token")
+    if not session_token and authorization and authorization.startswith("Bearer "):
+        session_token = authorization.replace("Bearer ", "")
+
     if session_token:
         await db.user_sessions.delete_one({"session_token": session_token})
     
@@ -331,10 +471,11 @@ async def create_vehicle(
         raise HTTPException(status_code=400, detail="Todas las 5 fotos son obligatorias")
     
     vehicle_id = f"vehicle_{uuid.uuid4().hex[:12]}"
+    vehicle_data = prepare_vehicle_images(vehicle.model_dump(), vehicle_id, request)
     new_vehicle = Vehicle(
         vehicle_id=vehicle_id,
         user_id=user.user_id,
-        **vehicle.model_dump()
+        **vehicle_data
     )
     
     await db.vehicles.insert_one(new_vehicle.model_dump())
@@ -420,9 +561,9 @@ async def get_vehicles(
     
     return [Vehicle(**v) for v in vehicles]
 
-@api_router.get("/vehicles/{vehicle_id}", response_model=Vehicle)
+@api_router.get("/vehicles/{vehicle_id}", response_model=VehicleDetail)
 async def get_vehicle(vehicle_id: str):
-    """Get a single vehicle by ID (public endpoint)"""
+    """Get a single vehicle by ID with public seller contact fields."""
     vehicle = await db.vehicles.find_one(
         {"vehicle_id": vehicle_id},
         {"_id": 0}
@@ -430,8 +571,16 @@ async def get_vehicle(vehicle_id: str):
     
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehículo no encontrado")
+
+    seller = await db.users.find_one(
+        {"user_id": vehicle.get("user_id")},
+        {"_id": 0, "name": 1, "phone": 1}
+    )
+    if seller:
+        vehicle["seller_name"] = seller.get("name")
+        vehicle["seller_phone"] = seller.get("phone")
     
-    return Vehicle(**vehicle)
+    return VehicleDetail(**vehicle)
 
 @api_router.put("/vehicles/{vehicle_id}", response_model=Vehicle)
 async def update_vehicle(
@@ -457,6 +606,7 @@ async def update_vehicle(
     
     # Update vehicle
     update_data = {k: v for k, v in vehicle_update.model_dump().items() if v is not None}
+    update_data = prepare_vehicle_images(update_data, vehicle_id, request)
     update_data["updated_at"] = datetime.now(timezone.utc)
     
     await db.vehicles.update_one(
@@ -522,50 +672,31 @@ class Payment(BaseModel):
     vehicle_id: str
     user_id: str
     tipo_pago: str  # "destacado_10d" | "priorizado_5d_7d"
-    monto: float  # 10 o 5 soles
-    numero_operacion: str  # Número de operación Yape
-    estado: str = "aprobado"  # "aprobado" (auto) | "verificado" (admin) | "rechazado"
-    placa: str = ""  # Placa del vehículo para referencia rápida
-    marca_modelo: str = ""  # Marca y modelo para referencia
+    monto: float
+    numero_operacion: str
+    estado: str = "pendiente"  # "pendiente" | "verificado" | "rechazado"
+    placa: str = ""
+    marca_modelo: str = ""
+    etiqueta_destacado: Optional[str] = "destacado"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     verificado_por: Optional[str] = None
     verificado_at: Optional[datetime] = None
 
 class PromoteVehicleRequest(BaseModel):
-    tipo_pago: str  # "destacado_10d" | "priorizado_5d_7d"
-    numero_operacion: str  # Número de operación Yape
-    etiqueta: Optional[str] = "destacado"  # "oferta" | "ocasion" | "por_viaje" | "destacado" | "super_anuncio"
+    tipo_pago: str
+    numero_operacion: str
+    etiqueta: Optional[str] = "destacado"
 
 ETIQUETAS_VALIDAS = ["oferta", "ocasion", "por_viaje", "destacado", "super_anuncio"]
 
 class VerifyPaymentRequest(BaseModel):
     estado: str  # "verificado" | "rechazado"
 
-# Configuración de pagos Yape
-YAPE_CONFIG = {
-    "numero": "938567871",
-    "titular": "AQP-Autos",
-    "planes": {
-        "destacado_10d": {
-            "nombre": "Anuncio Destacado",
-            "descripcion": "Tu anuncio se destaca con badge especial por 10 días",
-            "dias": 10,
-            "monto": 10.00,
-            "tipo_destacado": "premium"
-        },
-        "priorizado_5d_7d": {
-            "nombre": "Priorizado + Extensión",
-            "descripcion": "Priorización por fecha de publicación 5 días + 1 semana adicional",
-            "dias": 12,  # 5 + 7
-            "monto": 5.00,
-            "tipo_destacado": "basico"
-        }
-    }
-}
+YAPE_CONFIG = get_yape_config()
 
 @api_router.get("/payments/config")
 async def get_payment_config():
-    """Obtener configuración de pagos (público)"""
+    """Obtener configuración de pagos (público)."""
     return {
         "yape_numero": YAPE_CONFIG["numero"],
         "yape_titular": YAPE_CONFIG["titular"],
@@ -580,67 +711,42 @@ async def promote_vehicle(
     authorization: Optional[str] = Header(None)
 ):
     """
-    Destacar/Priorizar vehículo con pago Yape.
-    Aprobación automática con número de operación.
-    Planes:
-    - destacado_10d: S/ 10 - Anuncio destacado por 10 días
-    - priorizado_5d_7d: S/ 5 - Priorizado 5 días + 1 semana extra
+    Registra una solicitud de destacado con comprobante Yape.
+    El anuncio queda pendiente hasta que un administrador verifique el pago.
     """
     user = await get_current_user(request, authorization)
-    
-    # Verificar que el vehículo existe y pertenece al usuario
+
     vehicle = await db.vehicles.find_one(
         {"vehicle_id": vehicle_id},
         {"_id": 0}
     )
-    
+
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehículo no encontrado")
-    
+
     if vehicle["user_id"] != user.user_id:
         raise HTTPException(status_code=403, detail="No tienes permiso para destacar este vehículo")
-    
-    # Validar tipo de pago
+
     if promote_data.tipo_pago not in YAPE_CONFIG["planes"]:
         raise HTTPException(status_code=400, detail="Tipo de pago inválido. Use 'destacado_10d' o 'priorizado_5d_7d'")
-    
-    # Validar número de operación
-    if not promote_data.numero_operacion or len(promote_data.numero_operacion.strip()) < 3:
+
+    numero_operacion = promote_data.numero_operacion.strip() if promote_data.numero_operacion else ""
+    if len(numero_operacion) < 3:
         raise HTTPException(status_code=400, detail="Número de operación Yape inválido")
-    
-    # Validar etiqueta
+
     etiqueta = promote_data.etiqueta or "destacado"
     if etiqueta not in ETIQUETAS_VALIDAS:
         raise HTTPException(status_code=400, detail=f"Etiqueta inválida. Opciones: {', '.join(ETIQUETAS_VALIDAS)}")
-    
-    # Verificar que el número de operación no se haya usado antes
+
     existing_payment = await db.payments.find_one(
-        {"numero_operacion": promote_data.numero_operacion.strip()},
+        {"numero_operacion": numero_operacion},
         {"_id": 0}
     )
     if existing_payment:
         raise HTTPException(status_code=400, detail="Este número de operación ya fue utilizado")
-    
+
     plan = YAPE_CONFIG["planes"][promote_data.tipo_pago]
-    
-    # Calcular fecha de expiración
-    now = datetime.now(timezone.utc)
-    
-    # Si ya está destacado, extender desde la fecha actual de vencimiento
-    fecha_destacado_hasta = vehicle.get("fecha_destacado_hasta")
-    if vehicle.get("es_destacado") and fecha_destacado_hasta:
-        if isinstance(fecha_destacado_hasta, str):
-            fecha_destacado_hasta = datetime.fromisoformat(fecha_destacado_hasta.replace('Z', '+00:00'))
-        if fecha_destacado_hasta.tzinfo is None:
-            fecha_destacado_hasta = fecha_destacado_hasta.replace(tzinfo=timezone.utc)
-        if fecha_destacado_hasta > now:
-            fecha_hasta = fecha_destacado_hasta + timedelta(days=plan["dias"])
-        else:
-            fecha_hasta = now + timedelta(days=plan["dias"])
-    else:
-        fecha_hasta = now + timedelta(days=plan["dias"])
-    
-    # Registrar pago - APROBACIÓN AUTOMÁTICA
+
     payment_id = f"pay_{uuid.uuid4().hex[:12]}"
     new_payment = Payment(
         payment_id=payment_id,
@@ -648,49 +754,30 @@ async def promote_vehicle(
         user_id=user.user_id,
         tipo_pago=promote_data.tipo_pago,
         monto=plan["monto"],
-        numero_operacion=promote_data.numero_operacion.strip(),
-        estado="aprobado",
+        numero_operacion=numero_operacion,
+        estado="pendiente",
         placa=vehicle.get("placa", ""),
-        marca_modelo=f"{vehicle.get('marca', '')} {vehicle.get('modelo', '')}".strip()
+        marca_modelo=f"{vehicle.get('marca', '')} {vehicle.get('modelo', '')}".strip(),
+        etiqueta_destacado=etiqueta
     )
     await db.payments.insert_one(new_payment.model_dump())
-    
-    # Actualizar vehículo como destacado - AUTOMÁTICO
-    # Si el nuevo plan es mejor (premium > basico), actualizar tipo
-    current_tipo = vehicle.get("tipo_destacado", "")
-    new_tipo = plan["tipo_destacado"]
-    final_tipo = "premium" if (current_tipo == "premium" or new_tipo == "premium") else new_tipo
-    
-    await db.vehicles.update_one(
-        {"vehicle_id": vehicle_id},
-        {
-            "$set": {
-                "es_destacado": True,
-                "tipo_destacado": final_tipo,
-                "fecha_destacado_hasta": fecha_hasta,
-                "etiqueta_destacado": etiqueta,
-                "updated_at": now
-            }
-        }
-    )
-    
+
     return {
-        "message": f"Pago registrado. {plan['nombre']} activado automáticamente.",
+        "message": "Pago registrado. Tu anuncio quedará destacado cuando el administrador verifique el Yape.",
         "payment_id": payment_id,
         "plan": plan["nombre"],
         "monto": plan["monto"],
         "dias": plan["dias"],
-        "valido_hasta": fecha_hasta.isoformat(),
-        "numero_operacion": promote_data.numero_operacion.strip(),
-        "estado": "aprobado",
-        "nota": "Su anuncio ya está destacado. Los pagos son verificados por muestreo."
+        "numero_operacion": numero_operacion,
+        "estado": "pendiente",
+        "nota": "El destacado no se activa automáticamente. Revisa el panel admin para aprobar o rechazar el pago."
     }
 
 @api_router.get("/vehicles/featured/list")
 async def get_featured_vehicles(limite: int = 20):
-    """Obtener solo vehículos destacados activos"""
+    """Obtener solo vehículos destacados activos."""
     now = datetime.now(timezone.utc)
-    
+
     vehicles = await db.vehicles.find(
         {
             "estado": "activo",
@@ -701,19 +788,17 @@ async def get_featured_vehicles(limite: int = 20):
     ).sort([
         ("created_at", -1)
     ]).limit(limite).to_list(limite)
-    
+
     return [Vehicle(**v) for v in vehicles]
 
 # ============= ADMIN ENDPOINTS =============
 
-ADMIN_PIN = "1234"  # PIN de administrador para acceso
-
 @api_router.post("/admin/login")
 async def admin_login(request: Request):
-    """Verificar PIN de administrador"""
+    """Verificar PIN de administrador configurado por variable de entorno."""
     body = await request.json()
     pin = body.get("pin", "")
-    if pin != ADMIN_PIN:
+    if pin != get_admin_pin():
         raise HTTPException(status_code=403, detail="PIN de administrador incorrecto")
     return {"message": "Acceso de administrador concedido", "admin": True}
 
@@ -724,22 +809,22 @@ async def get_admin_payments(
     limite: int = 50,
     skip: int = 0
 ):
-    """Obtener lista de pagos para verificación de administrador"""
+    """Obtener lista de pagos para verificación de administrador."""
     body_pin = request.headers.get("X-Admin-Pin", "")
-    if body_pin != ADMIN_PIN:
+    if body_pin != get_admin_pin():
         raise HTTPException(status_code=403, detail="Acceso de administrador requerido")
-    
+
     filters: Dict = {}
     if estado:
         filters["estado"] = estado
-    
+
     payments = await db.payments.find(
         filters,
         {"_id": 0}
     ).sort("created_at", -1).skip(skip).limit(limite).to_list(limite)
-    
+
     total = await db.payments.count_documents(filters)
-    
+
     return {
         "payments": payments,
         "total": total,
@@ -753,55 +838,80 @@ async def verify_payment(
     payment_id: str,
     verify_data: VerifyPaymentRequest
 ):
-    """Verificar o rechazar un pago (admin)"""
+    """Verificar o rechazar un pago. Solo al verificar se activa el destacado."""
     body_pin = request.headers.get("X-Admin-Pin", "")
-    if body_pin != ADMIN_PIN:
+    if body_pin != get_admin_pin():
         raise HTTPException(status_code=403, detail="Acceso de administrador requerido")
-    
+
     if verify_data.estado not in ["verificado", "rechazado"]:
         raise HTTPException(status_code=400, detail="Estado inválido. Use 'verificado' o 'rechazado'")
-    
+
     payment = await db.payments.find_one(
         {"payment_id": payment_id},
         {"_id": 0}
     )
-    
+
     if not payment:
         raise HTTPException(status_code=404, detail="Pago no encontrado")
-    
-    now = datetime.now(timezone.utc)
-    
-    # Actualizar estado del pago
-    await db.payments.update_one(
-        {"payment_id": payment_id},
-        {
-            "$set": {
-                "estado": verify_data.estado,
-                "verificado_at": now
-            }
+
+    if payment.get("estado") == "verificado" and verify_data.estado == "verificado":
+        return {
+            "message": "El pago ya estaba verificado",
+            "payment_id": payment_id,
+            "estado": payment.get("estado")
         }
-    )
-    
-    # Si se rechaza, desactivar el destacado del vehículo
-    if verify_data.estado == "rechazado":
-        await db.vehicles.update_one(
-            {"vehicle_id": payment["vehicle_id"]},
-            {
-                "$set": {
-                    "es_destacado": False,
-                    "tipo_destacado": None,
-                    "fecha_destacado_hasta": None,
-                    "etiqueta_destacado": None,
-                    "updated_at": now
-                }
-            }
-        )
-    
-    return {
+
+    now = datetime.now(timezone.utc)
+
+    update_payment_data = {
+        "estado": verify_data.estado,
+        "verificado_at": now,
+        "verificado_por": "admin"
+    }
+
+    result_payload = {
         "message": f"Pago {verify_data.estado} exitosamente",
         "payment_id": payment_id,
         "estado": verify_data.estado
     }
+
+    if verify_data.estado == "verificado":
+        vehicle = await db.vehicles.find_one(
+            {"vehicle_id": payment["vehicle_id"]},
+            {"_id": 0}
+        )
+        if not vehicle:
+            raise HTTPException(status_code=404, detail="Vehículo asociado no encontrado")
+
+        plan = YAPE_CONFIG["planes"].get(payment["tipo_pago"])
+        if not plan:
+            raise HTTPException(status_code=400, detail="Plan de pago inválido")
+
+        fecha_hasta = calculate_featured_until(vehicle, plan["dias"], now)
+        final_tipo = choose_featured_type(vehicle.get("tipo_destacado"), plan["tipo_destacado"])
+        etiqueta = payment.get("etiqueta_destacado") or "destacado"
+
+        await db.vehicles.update_one(
+            {"vehicle_id": payment["vehicle_id"]},
+            {
+                "$set": {
+                    "es_destacado": True,
+                    "tipo_destacado": final_tipo,
+                    "fecha_destacado_hasta": fecha_hasta,
+                    "etiqueta_destacado": etiqueta,
+                    "updated_at": now
+                }
+            }
+        )
+        update_payment_data["fecha_destacado_hasta"] = fecha_hasta
+        result_payload["valido_hasta"] = fecha_hasta.isoformat()
+
+    await db.payments.update_one(
+        {"payment_id": payment_id},
+        {"$set": update_payment_data}
+    )
+
+    return result_payload
 
 # ============= FAVORITES ENDPOINTS =============
 
@@ -913,11 +1023,14 @@ async def health_check():
 
 # Include the router in the main app
 app.include_router(api_router)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_ROOT)), name="uploads")
+
+cors_origins = [origin.strip() for origin in os.environ.get("CORS_ORIGINS", "*").split(",") if origin.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=False,  # No necesario - usamos Bearer tokens, no cookies
-    allow_origins=["*"],
+    allow_credentials=False,
+    allow_origins=cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

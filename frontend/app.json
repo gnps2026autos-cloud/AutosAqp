@@ -41,7 +41,10 @@
               "scheme": "aqpautos"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "config": {
@@ -60,7 +63,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#00BCD4"
@@ -75,9 +78,10 @@
       "router": {
         "origin": false
       },
-      "eas": {}
+      "eas": {
+        "projectId": "c0bc59c3-14db-482a-ba1b-131e7bbb0174"
+      }
     },
-    "owner": "gnps",
     "runtimeVersion": {
       "policy": "sdkVersion"
     }

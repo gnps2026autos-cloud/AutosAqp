@@ -84,11 +84,23 @@ export default function VehicleDetailScreen() {
     }
   };
 
-  const handleCall = (phone: string) => {
+  const getSellerPhone = () => vehicle?.seller_phone?.trim() || '';
+
+  const handleCall = () => {
+    const phone = getSellerPhone();
+    if (!phone) {
+      Alert.alert('Contacto no disponible', 'El vendedor todavía no registró un número de teléfono.');
+      return;
+    }
     Linking.openURL(`tel:${phone}`);
   };
 
-  const handleWhatsApp = (phone: string) => {
+  const handleWhatsApp = () => {
+    const phone = getSellerPhone();
+    if (!phone) {
+      Alert.alert('Contacto no disponible', 'El vendedor todavía no registró un número de WhatsApp.');
+      return;
+    }
     const message = `Hola, estoy interesado en tu ${vehicle?.marca} ${vehicle?.modelo} ${vehicle?.anio}`;
     Linking.openURL(`https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`);
   };
@@ -113,7 +125,11 @@ export default function VehicleDetailScreen() {
     { uri: vehicle.foto_costado_izq, label: 'Costado Izquierdo' },
     { uri: vehicle.foto_costado_der, label: 'Costado Derecho' },
     { uri: vehicle.foto_interior, label: 'Interior' },
-  ];
+    ...(vehicle.galeria_fotos || []).map((uri, index) => ({
+      uri,
+      label: `Galería ${index + 1}`,
+    })),
+  ].filter((image) => Boolean(image.uri));
 
   return (
     <SafeAreaView style={styles.container}>
@@ -253,6 +269,20 @@ export default function VehicleDetailScreen() {
           </View>
         </View>
 
+        {/* Seller */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Vendedor</Text>
+          <View style={styles.locationRow}>
+            <Ionicons name="person-circle-outline" size={24} color="#007AFF" />
+            <View>
+              <Text style={styles.sellerName}>{vehicle.seller_name || 'Vendedor particular'}</Text>
+              <Text style={styles.sellerPhone}>
+                {vehicle.seller_phone ? vehicle.seller_phone : 'Sin número registrado'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
         <View style={{ height: 100 }} />
       </ScrollView>
 
@@ -261,14 +291,14 @@ export default function VehicleDetailScreen() {
         <View style={styles.contactContainer}>
           <TouchableOpacity
             style={[styles.contactButton, styles.whatsappButton]}
-            onPress={() => handleWhatsApp('+51999999999')}
+            onPress={handleWhatsApp}
           >
             <Ionicons name="logo-whatsapp" size={24} color="#fff" />
             <Text style={styles.contactButtonText}>WhatsApp</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.contactButton, styles.callButton]}
-            onPress={() => handleCall('+51999999999')}
+            onPress={handleCall}
           >
             <Ionicons name="call" size={24} color="#fff" />
             <Text style={styles.contactButtonText}>Llamar</Text>
@@ -463,6 +493,16 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 16,
     color: '#1a1a1a',
+  },
+  sellerName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+  },
+  sellerPhone: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
   },
   contactContainer: {
     position: 'absolute',

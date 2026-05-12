@@ -202,15 +202,15 @@ Content-Type: application/json
 - `ciudad`: Ciudad (siempre "Arequipa")
 - `latitude`: Latitud GPS
 - `longitude`: Longitud GPS
-- `foto_frente`: Foto frontal (base64)
-- `foto_atras`: Foto trasera (base64)
-- `foto_costado_izq`: Foto costado izquierdo (base64)
-- `foto_costado_der`: Foto costado derecho (base64)
-- `foto_interior`: Foto interior con tablero y llaves (base64)
+- `foto_frente`: Foto frontal enviada como base64; el backend devuelve URL
+- `foto_atras`: Foto trasera enviada como base64; el backend devuelve URL
+- `foto_costado_izq`: Foto costado izquierdo enviada como base64; el backend devuelve URL
+- `foto_costado_der`: Foto costado derecho enviada como base64; el backend devuelve URL
+- `foto_interior`: Foto interior enviada como base64; el backend devuelve URL
 
 **Campos Opcionales:**
 - `distrito`: Distrito de Arequipa
-- `galeria_fotos`: Array de fotos adicionales (base64)
+- `galeria_fotos`: Array de fotos adicionales enviadas como base64; el backend devuelve URLs
 
 **Categorías Válidas:**
 ```
@@ -516,12 +516,12 @@ Authorization: Bearer {session_token}
   distrito?: string;        // Distrito de Arequipa
   latitude: number;         // Latitud GPS
   longitude: number;        // Longitud GPS
-  foto_frente: string;      // Foto frontal (base64)
-  foto_atras: string;       // Foto trasera (base64)
-  foto_costado_izq: string; // Foto costado izquierdo (base64)
-  foto_costado_der: string; // Foto costado derecho (base64)
+  foto_frente: string;      // Foto frontal enviada como base64; el backend devuelve URL
+  foto_atras: string;       // Foto trasera enviada como base64; el backend devuelve URL
+  foto_costado_izq: string; // Foto costado izquierdo enviada como base64; el backend devuelve URL
+  foto_costado_der: string; // Foto costado derecho enviada como base64; el backend devuelve URL
   foto_interior: string;    // Foto interior (base64)
-  galeria_fotos: string[];  // Array de fotos adicionales (base64)
+  galeria_fotos: string[];  // Array de fotos adicionales enviadas como base64; el backend devuelve URLs
   estado: string;           // activo | vendido | inactivo
   created_at: datetime;     // Fecha de creación
   updated_at: datetime;     // Fecha de última actualización
@@ -579,9 +579,9 @@ Solicitud exitosa.
 - También se puede usar en el header `Authorization`
 
 ### Imágenes
-- Todas las imágenes se guardan en formato base64
-- Formato esperado: `data:image/jpeg;base64,{base64_string}`
-- Se recomienda comprimir las imágenes antes de subirlas
+- El frontend puede enviar imágenes como `data:image/jpeg;base64,{base64_string}`.
+- El backend las convierte a archivos en `backend/uploads/vehicles` y guarda en MongoDB solo la URL pública.
+- Se recomienda comprimir las imágenes antes de subirlas y configurar `PUBLIC_BASE_URL` en producción.
 
 ### Paginación
 - Los endpoints de listado soportan paginación con `limite` y `skip`

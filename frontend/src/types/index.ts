@@ -39,6 +39,8 @@ export interface Vehicle {
   estado: string;
   created_at: string;
   updated_at: string;
+  seller_name?: string;
+  seller_phone?: string;
 }
 
 export interface VehicleCreate {
@@ -63,6 +65,7 @@ export interface VehicleCreate {
   foto_costado_izq: string;
   foto_costado_der: string;
   foto_interior: string;
+  galeria_fotos?: string[];
 }
 
 export interface FilterOptions {

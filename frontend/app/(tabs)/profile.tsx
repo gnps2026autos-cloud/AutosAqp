@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,14 +8,45 @@ import {
   Image,
   ScrollView,
   Alert,
+  TextInput,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/contexts/AuthContext';
+import { authAPI } from '../../src/utils/api';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, sessionToken, updateUser } = useAuth();
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [phoneInput, setPhoneInput] = useState('');
+
+  const handleOpenEdit = () => {
+    setNameInput(user?.name || '');
+    setPhoneInput(user?.phone || '');
+    setShowEditModal(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!nameInput.trim()) {
+      Alert.alert('Campo requerido', 'Ingresa tu nombre.');
+      return;
+    }
+
+    try {
+      const updated = await authAPI.updateProfile(
+        { name: nameInput.trim(), phone: phoneInput.trim() },
+        sessionToken || undefined
+      );
+      updateUser(updated);
+      setShowEditModal(false);
+      Alert.alert('Perfil actualizado', 'Tus datos de contacto fueron guardados.');
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.detail || 'No se pudo actualizar el perfil');
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -73,7 +104,7 @@ export default function ProfileScreen() {
           
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => Alert.alert('Próximamente', 'Esta función estará disponible pronto')}
+            onPress={handleOpenEdit}
           >
             <View style={styles.menuItemLeft}>
               <Ionicons name="person-outline" size={24} color="#007AFF" />
@@ -166,6 +197,50 @@ export default function ProfileScreen() {
 
         <Text style={styles.version}>Versión 1.0.0</Text>
       </ScrollView>
+
+      <Modal
+        visible={showEditModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Editar perfil</Text>
+            <Text style={styles.inputLabel}>Nombre</Text>
+            <TextInput
+              style={styles.input}
+              value={nameInput}
+              onChangeText={setNameInput}
+              placeholder="Tu nombre"
+            />
+            <Text style={styles.inputLabel}>Teléfono / WhatsApp</Text>
+            <TextInput
+              style={styles.input}
+              value={phoneInput}
+              onChangeText={setPhoneInput}
+              placeholder="Ej: +51987654321"
+              keyboardType="phone-pad"
+            />
+            <Text style={styles.inputHint}>Este número se mostrará a los compradores interesados en tus vehículos.</Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowEditModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleSaveProfile}
+              >
+                <Text style={styles.saveButtonText}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -250,6 +325,71 @@ const styles = StyleSheet.create({
   menuItemText: {
     fontSize: 16,
     color: '#1a1a1a',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    padding: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    marginBottom: 14,
+  },
+  inputHint: {
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 18,
+    marginBottom: 18,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#F1F1F1',
+  },
+  cancelButtonText: {
+    color: '#333',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  saveButton: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#007AFF',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   logoutButton: {
     backgroundColor: '#fff',

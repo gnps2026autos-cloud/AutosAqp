@@ -113,7 +113,7 @@ export default function AdminScreen() {
 
   const getEstadoColor = (estado: string) => {
     switch (estado) {
-      case 'aprobado': return '#FF9800';
+      case 'pendiente': return '#FF9800';
       case 'verificado': return '#4CAF50';
       case 'rechazado': return '#F44336';
       default: return '#666';
@@ -122,7 +122,7 @@ export default function AdminScreen() {
 
   const getEstadoLabel = (estado: string) => {
     switch (estado) {
-      case 'aprobado': return 'Auto-aprobado';
+      case 'pendiente': return 'Pendiente';
       case 'verificado': return 'Verificado';
       case 'rechazado': return 'Rechazado';
       default: return estado;
@@ -179,7 +179,7 @@ export default function AdminScreen() {
         </View>
       </View>
 
-      {item.estado === 'aprobado' && (
+      {item.estado === 'pendiente' && (
         <View style={styles.paymentActions}>
           <TouchableOpacity
             style={styles.verifyButton}
@@ -259,7 +259,7 @@ export default function AdminScreen() {
       <View style={styles.filterContainer}>
         {[
           { key: '', label: 'Todos' },
-          { key: 'aprobado', label: 'Pendientes' },
+          { key: 'pendiente', label: 'Pendientes' },
           { key: 'verificado', label: 'Verificados' },
           { key: 'rechazado', label: 'Rechazados' },
         ].map((f) => (

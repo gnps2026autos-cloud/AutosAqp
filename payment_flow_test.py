@@ -7,12 +7,13 @@ Tests the complete flow as described in the review request
 import requests
 import json
 import time
+import os
 from datetime import datetime
 
 # Test configuration
-BASE_URL = "https://carsell-regional.preview.emergentagent.com/api"
-TEST_USER_TOKEN = "test_session_1775078939901"
-ADMIN_PIN = "1234"
+BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8001/api").rstrip("/")
+TEST_USER_TOKEN = os.environ.get("TEST_USER_TOKEN", "")
+ADMIN_PIN = os.environ.get("ADMIN_PIN", "cambia_este_pin")
 
 # Sample vehicle data
 SAMPLE_VEHICLE = {
@@ -91,10 +92,10 @@ def test_complete_payment_flow():
     
     payment_data = response.json()
     payment_id = payment_data.get("payment_id")
-    print(f"✅ Vehicle promoted successfully: {payment_id}")
+    print(f"✅ Payment registered successfully: {payment_id}")
     print(f"   Plan: {payment_data.get('plan')}")
     print(f"   Amount: S/ {payment_data.get('monto')}")
-    print(f"   Valid until: {payment_data.get('valido_hasta')}")
+    print(f"   Payment status: {payment_data.get('estado')}")
     print(f"   Status: {payment_data.get('estado')}")
     
     # Step 3: Try promoting with same operation number (should fail)

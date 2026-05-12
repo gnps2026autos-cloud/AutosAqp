@@ -4,7 +4,7 @@ Aplicación móvil para compra y venta de vehículos en la región de Arequipa, 
 
 ![Versión](https://img.shields.io/badge/versi%C3%B3n-1.0.0-blue.svg)
 ![Plataforma](https://img.shields.io/badge/plataforma-iOS%20%7C%20Android-green.svg)
-![Expo](https://img.shields.io/badge/Expo-SDK%2053-black.svg)
+![Expo](https://img.shields.io/badge/Expo-SDK%2054-black.svg)
 
 ---
 
@@ -70,7 +70,7 @@ AQP-Autos es una plataforma móvil moderna estilo Wallapop diseñada específica
 - **Estado**: React Context API
 - **Cliente HTTP**: Axios
 - **Formularios**: React Hook Form
-- **Imágenes**: Expo Image Picker (base64)
+- **Imágenes**: Expo Image Picker; el backend convierte base64 a archivos servidos por `/uploads`
 - **Ubicación**: Expo Location
 - **Mapas**: React Native Maps
 
@@ -117,8 +117,13 @@ cp .env.example .env
 
 **Archivo `.env` del backend:**
 ```env
-MONGO_URL=mongodb://localhost:27017/aqp_autos
+MONGO_URL=mongodb://localhost:27017
 DB_NAME=aqp_autos
+ADMIN_PIN=cambia_este_pin
+PUBLIC_BASE_URL=
+CORS_ORIGINS=*
+YAPE_NUMERO=938567871
+YAPE_TITULAR=AQP-Autos
 ```
 
 ### 3. Configurar Frontend
@@ -336,8 +341,9 @@ La aplicación incluye validaciones estrictas:
 - Verifica la variable `MONGO_URL` en el backend
 
 ### Las imágenes no se muestran
-- Las imágenes se guardan en base64
-- Verifica que la conversión a base64 esté funcionando
+- El backend guarda las fotos como archivos en `backend/uploads/vehicles` y devuelve URLs públicas.
+- Verifica que `PUBLIC_BASE_URL` apunte a la URL real del backend si pruebas desde un celular físico.
+- En desarrollo local, asegúrate de que el dispositivo pueda acceder a `EXPO_PUBLIC_BACKEND_URL`.
 
 ## 📄 Licencia
 

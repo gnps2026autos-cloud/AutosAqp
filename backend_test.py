@@ -8,13 +8,15 @@ import requests
 import json
 import base64
 import time
+import os
 from datetime import datetime
 from typing import Dict, Any, Optional
 
 # Test configuration
-BASE_URL = "https://carsell-regional.preview.emergentagent.com/api"
-TEST_USER_1_TOKEN = "test_session_1775078939901"
-TEST_USER_2_TOKEN = "test_session2_1775078939901"
+BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8001/api").rstrip("/")
+TEST_USER_1_TOKEN = os.environ.get("TEST_USER_1_TOKEN", "")
+TEST_USER_2_TOKEN = os.environ.get("TEST_USER_2_TOKEN", "")
+ADMIN_PIN = os.environ.get("ADMIN_PIN", "cambia_este_pin")
 
 # Test data
 SAMPLE_VEHICLE_DATA = {
@@ -529,7 +531,7 @@ def test_payment_system(results: TestResults, vehicle_id: Optional[str]):
         response = make_request("POST", f"/vehicles/{vehicle_id}/promote", token=TEST_USER_1_TOKEN, data=promote_data)
         if response.status_code == 200:
             data = response.json()
-            if "payment_id" in data and data.get("estado") == "aprobado":
+            if "payment_id" in data and data.get("estado") == "pendiente":
                 payment_id = data.get("payment_id")
                 results.add_pass("POST /vehicles/{id}/promote (valid data)")
             else:
@@ -645,7 +647,7 @@ def test_admin_panel(results: TestResults, payment_id: Optional[str]):
     
     # Test POST /api/admin/login with correct PIN
     try:
-        login_data = {"pin": "1234"}
+        login_data = {"pin": ADMIN_PIN}
         response = make_request("POST", "/admin/login", data=login_data)
         if response.status_code == 200:
             data = response.json()
@@ -671,7 +673,7 @@ def test_admin_panel(results: TestResults, payment_id: Optional[str]):
     
     # Test GET /api/admin/payments with correct PIN
     try:
-        headers = {"X-Admin-Pin": "1234"}
+        headers = {"X-Admin-Pin": ADMIN_PIN}
         url = f"{BASE_URL}/admin/payments"
         response = requests.get(url, headers=headers, timeout=30)
         if response.status_code == 200:
@@ -714,8 +716,8 @@ def test_admin_panel(results: TestResults, payment_id: Optional[str]):
     
     # Test GET /api/admin/payments with estado filter
     try:
-        headers = {"X-Admin-Pin": "1234"}
-        url = f"{BASE_URL}/admin/payments?estado=aprobado"
+        headers = {"X-Admin-Pin": ADMIN_PIN}
+        url = f"{BASE_URL}/admin/payments?estado=pendiente"
         response = requests.get(url, headers=headers, timeout=30)
         if response.status_code == 200:
             data = response.json()
@@ -731,7 +733,7 @@ def test_admin_panel(results: TestResults, payment_id: Optional[str]):
     if payment_id:
         # Test PUT /api/admin/payments/{payment_id}/verify with correct PIN (verificado)
         try:
-            headers = {"X-Admin-Pin": "1234", "Content-Type": "application/json"}
+            headers = {"X-Admin-Pin": ADMIN_PIN, "Content-Type": "application/json"}
             verify_data = {"estado": "verificado"}
             url = f"{BASE_URL}/admin/payments/{payment_id}/verify"
             response = requests.put(url, headers=headers, json=verify_data, timeout=30)
@@ -748,7 +750,7 @@ def test_admin_panel(results: TestResults, payment_id: Optional[str]):
         
         # Test PUT /api/admin/payments/{payment_id}/verify with correct PIN (rechazado)
         try:
-            headers = {"X-Admin-Pin": "1234", "Content-Type": "application/json"}
+            headers = {"X-Admin-Pin": ADMIN_PIN, "Content-Type": "application/json"}
             verify_data = {"estado": "rechazado"}
             url = f"{BASE_URL}/admin/payments/{payment_id}/verify"
             response = requests.put(url, headers=headers, json=verify_data, timeout=30)
@@ -778,7 +780,7 @@ def test_admin_panel(results: TestResults, payment_id: Optional[str]):
         
         # Test PUT /api/admin/payments/{payment_id}/verify with invalid estado
         try:
-            headers = {"X-Admin-Pin": "1234", "Content-Type": "application/json"}
+            headers = {"X-Admin-Pin": ADMIN_PIN, "Content-Type": "application/json"}
             verify_data = {"estado": "invalid_estado"}
             url = f"{BASE_URL}/admin/payments/{payment_id}/verify"
             response = requests.put(url, headers=headers, json=verify_data, timeout=30)
@@ -791,7 +793,7 @@ def test_admin_panel(results: TestResults, payment_id: Optional[str]):
     
     # Test PUT /api/admin/payments/{nonexistent}/verify
     try:
-        headers = {"X-Admin-Pin": "1234", "Content-Type": "application/json"}
+        headers = {"X-Admin-Pin": ADMIN_PIN, "Content-Type": "application/json"}
         verify_data = {"estado": "verificado"}
         url = f"{BASE_URL}/admin/payments/nonexistent/verify"
         response = requests.put(url, headers=headers, json=verify_data, timeout=30)

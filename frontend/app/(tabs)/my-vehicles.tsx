@@ -39,9 +39,11 @@ export default function MyVehiclesScreen() {
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [paymentStep, setPaymentStep] = useState<'select' | 'pay' | 'confirm'>('select');
   const [selectedEtiqueta, setSelectedEtiqueta] = useState<string>('destacado');
+  const [paymentConfig, setPaymentConfig] = useState<any>(null);
 
   useEffect(() => {
     loadVehicles();
+    loadPaymentConfig();
   }, []);
 
   const loadVehicles = async () => {
@@ -55,6 +57,19 @@ export default function MyVehiclesScreen() {
       setLoading(false);
     }
   };
+
+  const loadPaymentConfig = async () => {
+    try {
+      const config = await paymentsAPI.getConfig();
+      setPaymentConfig(config);
+    } catch (error) {
+      console.error('Error loading payment config:', error);
+    }
+  };
+
+  const yapeNumber = paymentConfig?.yape_numero || '';
+  const yapeTitular = paymentConfig?.yape_titular || 'AQP-Autos';
+  const formatYapeNumber = (number: string) => number ? number.replace(/(\d{3})(?=\d)/g, '$1 ').trim() : 'No configurado';
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -96,11 +111,15 @@ export default function MyVehiclesScreen() {
   };
 
   const handleCopyNumber = async () => {
+    if (!yapeNumber) {
+      Alert.alert('Yape no configurado', 'El administrador debe configurar YAPE_NUMERO en el backend.');
+      return;
+    }
     try {
-      await Clipboard.setStringAsync('938567871');
+      await Clipboard.setStringAsync(yapeNumber);
       Alert.alert('Copiado', 'Número de Yape copiado al portapapeles');
     } catch {
-      Alert.alert('Info', 'Número Yape: 938567871');
+      Alert.alert('Info', `Número Yape: ${yapeNumber}`);
     }
   };
 
@@ -127,8 +146,8 @@ export default function MyVehiclesScreen() {
 
       setShowPaymentModal(false);
       Alert.alert(
-        '¡Pago Registrado!',
-        `${result.message}\n\nPlan: ${result.plan}\nMonto: S/ ${result.monto}\nVálido hasta: ${new Date(result.valido_hasta).toLocaleDateString('es-PE')}\n\n${result.nota}`,
+        '¡Pago registrado!',
+        `${result.message}\n\nPlan: ${result.plan}\nMonto: S/ ${result.monto}\nEstado: ${result.estado}\n\n${result.nota}`,
         [{ text: 'Aceptar', onPress: () => loadVehicles() }]
       );
     } catch (error: any) {
@@ -140,23 +159,34 @@ export default function MyVehiclesScreen() {
   };
 
   const getPlanInfo = (planKey: string) => {
-    if (planKey === 'destacado_10d') {
-      return {
-        nombre: 'Anuncio Destacado',
-        descripcion: 'Tu anuncio se destaca con badge especial y aparece primero',
-        dias: '10 días',
-        monto: 'S/ 10',
-        icon: 'star' as const,
-        color: '#FFD700',
-      };
-    }
+    const plan = paymentConfig?.planes?.[planKey];
+    const fallback = planKey === 'destacado_10d'
+      ? {
+          nombre: 'Anuncio Destacado',
+          descripcion: 'Tu anuncio se destaca con badge especial y aparece primero',
+          dias: 10,
+          monto: 10,
+          icon: 'star' as const,
+          color: '#FFD700',
+        }
+      : {
+          nombre: 'Priorizado + Extensión',
+          descripcion: 'Priorización por fecha + 1 semana adicional de visibilidad',
+          dias: 12,
+          monto: 5,
+          icon: 'rocket' as const,
+          color: COLORS_THEME.primary,
+        };
+
+    const resolved = plan || fallback;
     return {
-      nombre: 'Priorizado + Extensión',
-      descripcion: 'Priorización por fecha + 1 semana adicional de visibilidad',
-      dias: '5 días + 7 días extra',
-      monto: 'S/ 5',
-      icon: 'rocket' as const,
-      color: COLORS_THEME.primary,
+      nombre: resolved.nombre || fallback.nombre,
+      descripcion: resolved.descripcion || fallback.descripcion,
+      dias: Number(resolved.dias ?? fallback.dias),
+      monto: Number(resolved.monto ?? fallback.monto),
+      montoLabel: `S/ ${Number(resolved.monto ?? fallback.monto).toFixed(2)}`,
+      icon: fallback.icon,
+      color: fallback.color,
     };
   };
 
@@ -318,16 +348,16 @@ export default function MyVehiclesScreen() {
                       <Ionicons name="star" size={28} color="#FFD700" />
                     </View>
                     <View style={styles.planPriceContainer}>
-                      <Text style={styles.planPrice}>S/ 10</Text>
+                      <Text style={styles.planPrice}>{getPlanInfo('destacado_10d').montoLabel}</Text>
                     </View>
                   </View>
-                  <Text style={styles.planName}>Anuncio Destacado</Text>
+                  <Text style={styles.planName}>{getPlanInfo('destacado_10d').nombre}</Text>
                   <Text style={styles.planDesc}>
-                    Tu anuncio aparece primero con un badge especial visible para todos los compradores
+                    {getPlanInfo('destacado_10d').descripcion}
                   </Text>
                   <View style={styles.planDuration}>
                     <Ionicons name="calendar" size={16} color={COLORS_THEME.primary} />
-                    <Text style={styles.planDurationText}>10 días de duración</Text>
+                    <Text style={styles.planDurationText}>{getPlanInfo('destacado_10d').dias} días de duración</Text>
                   </View>
                   {selectedPlan === 'destacado_10d' && (
                     <View style={styles.planCheck}>
@@ -350,16 +380,16 @@ export default function MyVehiclesScreen() {
                       <Ionicons name="rocket" size={28} color={COLORS_THEME.primary} />
                     </View>
                     <View style={styles.planPriceContainer}>
-                      <Text style={styles.planPrice}>S/ 5</Text>
+                      <Text style={styles.planPrice}>{getPlanInfo('priorizado_5d_7d').montoLabel}</Text>
                     </View>
                   </View>
-                  <Text style={styles.planName}>Priorizado + Extensión</Text>
+                  <Text style={styles.planName}>{getPlanInfo('priorizado_5d_7d').nombre}</Text>
                   <Text style={styles.planDesc}>
-                    Priorización por fecha de publicación por 5 días, más 1 semana adicional de visibilidad
+                    {getPlanInfo('priorizado_5d_7d').descripcion}
                   </Text>
                   <View style={styles.planDuration}>
                     <Ionicons name="calendar" size={16} color={COLORS_THEME.primary} />
-                    <Text style={styles.planDurationText}>5 días + 7 días extra</Text>
+                    <Text style={styles.planDurationText}>{getPlanInfo('priorizado_5d_7d').dias} días de duración</Text>
                   </View>
                   {selectedPlan === 'priorizado_5d_7d' && (
                     <View style={styles.planCheck}>
@@ -426,7 +456,7 @@ export default function MyVehiclesScreen() {
                     {getPlanInfo(selectedPlan).nombre}
                   </Text>
                   <Text style={styles.paymentSummaryAmount}>
-                    Monto a pagar: {getPlanInfo(selectedPlan).monto}
+                    Monto a pagar: {getPlanInfo(selectedPlan).montoLabel}
                   </Text>
                 </View>
 
@@ -440,7 +470,7 @@ export default function MyVehiclesScreen() {
                   
                   <Text style={styles.yapeLabel}>Envía el pago a este número:</Text>
                   <View style={styles.yapeNumberRow}>
-                    <Text style={styles.yapeNumber}>938 567 871</Text>
+                    <Text style={styles.yapeNumber}>{formatYapeNumber(yapeNumber)}</Text>
                     <TouchableOpacity 
                       style={styles.copyButton}
                       onPress={handleCopyNumber}
@@ -449,7 +479,7 @@ export default function MyVehiclesScreen() {
                       <Text style={styles.copyButtonText}>Copiar</Text>
                     </TouchableOpacity>
                   </View>
-                  <Text style={styles.yapeTitular}>Titular: AQP-Autos</Text>
+                  <Text style={styles.yapeTitular}>Titular: {yapeTitular}</Text>
                 </View>
 
                 <View style={styles.yapeSteps}>
@@ -458,7 +488,7 @@ export default function MyVehiclesScreen() {
                       <Text style={styles.yapeStepNumberText}>1</Text>
                     </View>
                     <Text style={styles.yapeStepText}>
-                      Abre tu app de Yape y busca el número 938567871
+                      Abre tu app de Yape y busca el número {yapeNumber || 'configurado por el administrador'}
                     </Text>
                   </View>
                   <View style={styles.yapeStep}>
@@ -466,7 +496,7 @@ export default function MyVehiclesScreen() {
                       <Text style={styles.yapeStepNumberText}>2</Text>
                     </View>
                     <Text style={styles.yapeStepText}>
-                      Envía {getPlanInfo(selectedPlan).monto} al número indicado
+                      Envía {getPlanInfo(selectedPlan).montoLabel} al número indicado
                     </Text>
                   </View>
                   <View style={styles.yapeStep}>
@@ -505,7 +535,7 @@ export default function MyVehiclesScreen() {
                 
                 <View style={styles.paymentSummary}>
                   <Text style={styles.paymentSummaryLabel}>
-                    {getPlanInfo(selectedPlan).nombre} - {getPlanInfo(selectedPlan).monto}
+                    {getPlanInfo(selectedPlan).nombre} - {getPlanInfo(selectedPlan).montoLabel}
                   </Text>
                 </View>
 
@@ -526,8 +556,8 @@ export default function MyVehiclesScreen() {
                 <View style={styles.warningBox}>
                   <Ionicons name="information-circle" size={20} color={COLORS_THEME.secondary} />
                   <Text style={styles.warningText}>
-                    Tu anuncio se activará automáticamente. Los pagos son verificados por muestreo.
-                    Números de operación falsos serán detectados y el anuncio será retirado.
+                    Tu anuncio quedará pendiente hasta que el administrador verifique el pago.
+                    Ingresa solo el número real de operación para evitar el rechazo.
                   </Text>
                 </View>
 
