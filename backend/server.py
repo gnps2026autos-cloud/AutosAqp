@@ -13,10 +13,15 @@ import uuid
 import base64
 import re
 from datetime import datetime, timezone, timedelta
-import httpx
+
+try:
+    import cloudinary
+    import cloudinary.uploader
+except ImportError:
+    cloudinary = None
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / '.env', encoding='utf-8-sig')
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -44,15 +49,65 @@ IMAGE_EXTENSIONS = {
 }
 MAX_IMAGE_BASE64_CHARS = int(os.environ.get("MAX_IMAGE_BASE64_CHARS", "6000000"))
 
+CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
+CLOUDINARY_API_KEY = os.environ.get("CLOUDINARY_API_KEY", "").strip()
+CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "").strip()
+CLOUDINARY_FOLDER = os.environ.get("CLOUDINARY_FOLDER", "AutosAqp/vehicles").strip() or "AutosAqp/vehicles"
+CLOUDINARY_ENABLED = all([CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET])
+
+if CLOUDINARY_ENABLED and cloudinary is not None:
+    cloudinary.config(
+        cloud_name=CLOUDINARY_CLOUD_NAME,
+        api_key=CLOUDINARY_API_KEY,
+        api_secret=CLOUDINARY_API_SECRET,
+        secure=True,
+    )
+
+def upload_image_to_cloudinary(image_value: str, vehicle_id: str, label: str) -> str:
+    """Upload a validated image data URL to Cloudinary and return its HTTPS URL."""
+    if not CLOUDINARY_ENABLED:
+        raise HTTPException(status_code=500, detail="Cloudinary no está configurado")
+
+    if cloudinary is None:
+        raise HTTPException(
+            status_code=500,
+            detail="La librería cloudinary no está instalada en el backend"
+        )
+
+    safe_label = re.sub(r"[^a-zA-Z0-9_-]", "_", label)
+    public_id = f"{vehicle_id}_{safe_label}_{uuid.uuid4().hex[:10]}"
+
+    try:
+        result = cloudinary.uploader.upload(
+            image_value,
+            folder=CLOUDINARY_FOLDER,
+            public_id=public_id,
+            overwrite=False,
+            resource_type="image",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudo subir la imagen {label} a Cloudinary: {exc}"
+        )
+
+    secure_url = result.get("secure_url")
+    if not secure_url:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Cloudinary no devolvió URL segura para {label}"
+        )
+    return secure_url
+
 def get_public_base_url(request: Request) -> str:
     """Base URL used to serve uploaded images back to the mobile app."""
     return os.environ.get("PUBLIC_BASE_URL") or str(request.base_url).rstrip("/")
 
 def save_image_if_base64(image_value: Optional[str], vehicle_id: str, label: str, request: Request) -> Optional[str]:
     """
-    Receives an image as a base64 data URL and stores it as a local file.
-    If the value is already an http(s) URL or an /uploads URL, it is returned as-is.
-    This keeps large image payloads out of MongoDB.
+    Receives an image as a base64 data URL and stores it in Cloudinary when configured.
+    If Cloudinary is not configured, it falls back to local /uploads storage for development.
+    Existing http(s) URLs and /uploads paths are returned unchanged.
     """
     if not image_value:
         return image_value
@@ -60,14 +115,14 @@ def save_image_if_base64(image_value: Optional[str], vehicle_id: str, label: str
     if image_value.startswith("http://") or image_value.startswith("https://") or image_value.startswith("/uploads/"):
         return image_value
 
-    match = IMAGE_DATA_URL_RE.match(image_value.strip())
+    clean_value = image_value.strip()
+    match = IMAGE_DATA_URL_RE.match(clean_value)
     if not match:
-        # Keep backwards compatibility with existing URLs/paths, but reject unknown data blobs.
-        if image_value.startswith("data:"):
+        if clean_value.startswith("data:"):
             raise HTTPException(status_code=400, detail=f"Formato de imagen inválido en {label}")
         return image_value
 
-    if len(image_value) > MAX_IMAGE_BASE64_CHARS:
+    if len(clean_value) > MAX_IMAGE_BASE64_CHARS:
         raise HTTPException(status_code=413, detail=f"La imagen {label} es demasiado pesada")
 
     mime_type, encoded = match.groups()
@@ -80,6 +135,10 @@ def save_image_if_base64(image_value: Optional[str], vehicle_id: str, label: str
     except Exception:
         raise HTTPException(status_code=400, detail=f"No se pudo leer la imagen {label}")
 
+    if CLOUDINARY_ENABLED:
+        return upload_image_to_cloudinary(clean_value, vehicle_id, label)
+
+    # Local fallback only for development. In production, configure Cloudinary.
     filename = f"{vehicle_id}_{label}_{uuid.uuid4().hex[:10]}.{extension}"
     file_path = UPLOAD_VEHICLES_DIR / filename
     file_path.write_bytes(image_bytes)
@@ -268,11 +327,15 @@ class Favorite(BaseModel):
     vehicle_id: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-class SessionData(BaseModel):
-    session_id: str
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
+    phone: Optional[str] = None
+    picture: Optional[str] = None
+
+class DemoLoginRequest(BaseModel):
+    email: EmailStr
+    name: str
     phone: Optional[str] = None
     picture: Optional[str] = None
 
@@ -328,83 +391,65 @@ async def get_current_user(request: Request, authorization: Optional[str] = Head
 
 # ============= AUTH ENDPOINTS =============
 
-@api_router.post("/auth/session")
-async def create_session(session_data: SessionData, response: Response):
+@api_router.post("/auth/demo-login")
+async def demo_login(login_data: DemoLoginRequest, response: Response):
     """
-    Exchange session_id for user data and create persistent session
-    REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+    Local/mobile login for APK builds.
+    This avoids Emergent Auth, which only works reliably inside the original builder/web flow.
     """
-    session_id = session_data.session_id
-    
-    # Call Emergent Auth API to get user data
-    async with httpx.AsyncClient() as client:
-        try:
-            auth_response = await client.get(
-                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-                headers={"X-Session-ID": session_id}
-            )
-            auth_response.raise_for_status()
-            user_data = auth_response.json()
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to authenticate: {str(e)}")
-    
-    # Create or update user
-    email = user_data.get("email")
-    name = user_data.get("name")
-    picture = user_data.get("picture")
-    
+    email = login_data.email.lower().strip()
+    name = login_data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="El nombre es obligatorio")
+
     user_doc = await db.users.find_one({"email": email}, {"_id": 0})
-    
+
+    update_payload = {"name": name}
+    if login_data.picture is not None:
+        update_payload["picture"] = login_data.picture
+    if login_data.phone is not None:
+        update_payload["phone"] = login_data.phone
+
     if user_doc:
         user_id = user_doc["user_id"]
-        # Update user info
-        await db.users.update_one(
-            {"user_id": user_id},
-            {"$set": {"name": name, "picture": picture}}
-        )
+        await db.users.update_one({"user_id": user_id}, {"$set": update_payload})
     else:
-        # Create new user
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         new_user = User(
             user_id=user_id,
             email=email,
             name=name,
-            picture=picture
+            phone=login_data.phone,
+            picture=login_data.picture
         )
         await db.users.insert_one(new_user.model_dump())
-        user_doc = new_user.model_dump()
-    
-    # Create session
-    session_token = user_data.get("session_token", f"session_{uuid.uuid4().hex}")
-    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
-    
-    # Delete old sessions for this user
+
+    session_token = f"session_{uuid.uuid4().hex}"
+    expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+
     await db.user_sessions.delete_many({"user_id": user_id})
-    
-    # Create new session
     new_session = UserSession(
         user_id=user_id,
         session_token=session_token,
         expires_at=expires_at
     )
     await db.user_sessions.insert_one(new_session.model_dump())
-    
-    # Set httpOnly cookie
+
     response.set_cookie(
         key="session_token",
         value=session_token,
         httponly=True,
-        secure=True,
-        samesite="none",
-        max_age=7 * 24 * 60 * 60,  # 7 days
+        secure=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
+        samesite="lax",
+        max_age=30 * 24 * 60 * 60,
         path="/"
     )
-    
-    # Return user data WITH session_token for native mobile apps
+
     user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     user_response = User(**user_doc).model_dump()
     user_response["session_token"] = session_token
     return user_response
+
 
 @api_router.get("/auth/me")
 async def get_me(request: Request, authorization: Optional[str] = Header(None)):

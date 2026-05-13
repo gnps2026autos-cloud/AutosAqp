@@ -1,45 +1,83 @@
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 
 export const pickImage = async (): Promise<string | null> => {
   try {
-    // Request permissions
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      alert('Se necesitan permisos para acceder a las fotos');
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      console.warn('Permiso denegado para acceder a la galería');
       return null;
     }
 
-    // Pick image
-    const result = await ImagePicker.launchImagePickerAsync({
-      mediaTypes: 'images' as any,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.6, // Reduce quality to keep base64 size manageable
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.7,
+      base64: true,
     });
 
-    if (result.canceled) {
+    if (result.canceled || !result.assets || result.assets.length === 0) {
       return null;
     }
 
-    // Convert to base64
-    const uri = result.assets[0].uri;
-    const base64 = await FileSystem.readAsStringAsync(uri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+    const asset = result.assets[0];
 
-    // Return with proper data URL format
-    return `data:image/jpeg;base64,${base64}`;
+    if (!asset.base64) {
+      console.warn('No se pudo obtener la imagen en base64');
+      return null;
+    }
+
+    const mimeType = asset.mimeType || 'image/jpeg';
+
+    return `data:${mimeType};base64,${asset.base64}`;
   } catch (error) {
     console.error('Error picking image:', error);
     return null;
   }
 };
 
-export const formatPrice = (price: number): string => {
-  return `S/ ${price.toLocaleString('es-PE')}`;
+export const formatPrice = (price?: number | string | null): string => {
+  const numericPrice =
+    typeof price === 'string' ? Number(price) : price ?? 0;
+
+  if (!Number.isFinite(numericPrice)) {
+    return 'S/ 0';
+  }
+
+  return `S/ ${numericPrice.toLocaleString('es-PE', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`;
 };
 
-export const formatKm = (km: number): string => {
-  return `${km.toLocaleString('es-PE')} km`;
+export const formatKm = (km?: number | string | null): string => {
+  const numericKm =
+    typeof km === 'string' ? Number(km) : km ?? 0;
+
+  if (!Number.isFinite(numericKm)) {
+    return '0 km';
+  }
+
+  return `${numericKm.toLocaleString('es-PE', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })} km`;
+};
+
+export const formatDate = (date?: string | Date | null): string => {
+  if (!date) {
+    return 'Fecha no disponible';
+  }
+
+  const parsedDate = typeof date === 'string' ? new Date(date) : date;
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return 'Fecha no disponible';
+  }
+
+  return parsedDate.toLocaleDateString('es-PE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 };

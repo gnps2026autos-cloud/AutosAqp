@@ -8,6 +8,7 @@ interface AuthContextType {
   loading: boolean;
   sessionToken: string | null;
   login: (sessionId: string) => Promise<void>;
+  loginDemo: (data: { email: string; name: string; phone?: string }) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (user: User) => void;
 }
@@ -40,19 +41,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const storeAuthenticatedUser = async (response: any) => {
+    const realSessionToken = response.session_token || `session_${Date.now()}`;
+    await AsyncStorage.setItem('session_token', realSessionToken);
+    setSessionToken(realSessionToken);
+    const userData = await authAPI.getMe(realSessionToken);
+    setUser(userData);
+  };
+
   const login = async (sessionId: string) => {
     try {
       const response = await authAPI.createSession(sessionId);
-      // El backend ahora devuelve session_token en el body para apps nativas
-      const sessionToken = response.session_token || `session_${Date.now()}`;
-      await AsyncStorage.setItem('session_token', sessionToken);
-      setSessionToken(sessionToken);
-      
-      // Obtener datos de usuario con el token real
-      const userData = await authAPI.getMe(sessionToken);
-      setUser(userData);
+      await storeAuthenticatedUser(response);
     } catch (error) {
       console.error('Login error:', error);
+      throw error;
+    }
+  };
+
+  const loginDemo = async (data: { email: string; name: string; phone?: string }) => {
+    try {
+      const response = await authAPI.demoLogin(data);
+      await storeAuthenticatedUser(response);
+    } catch (error) {
+      console.error('Demo login error:', error);
       throw error;
     }
   };
@@ -74,7 +86,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, sessionToken, login, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, sessionToken, login, loginDemo, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

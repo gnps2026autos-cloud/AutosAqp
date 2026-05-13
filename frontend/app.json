@@ -1,17 +1,17 @@
 {
   "expo": {
     "name": "AQP-Autos by GNPS",
-    "slug": "aqp-autos-gnps",
-    "version": "1.0.0",
+    "slug": "aqp-autos-giova",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "aqpautos",
+    "scheme": "aqpautosgiova",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gnps.aqpautos",
-      "buildNumber": "1",
+      "bundleIdentifier": "com.giova.aqpautos",
+      "buildNumber": "2",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Selecciona fotos del vehículo",
         "NSCameraUsageDescription": "Toma fotos del vehículo",
@@ -19,13 +19,14 @@
       }
     },
     "android": {
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#00BCD4"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.gnps.aqpautos",
-      "versionCode": 1,
+      "package": "com.giova.aqpautos",
+      "versionCode": 10,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -38,7 +39,7 @@
           "action": "VIEW",
           "data": [
             {
-              "scheme": "aqpautos"
+              "scheme": "aqpautosgiova"
             }
           ],
           "category": [
@@ -79,11 +80,12 @@
         "origin": false
       },
       "eas": {
-        "projectId": "c0bc59c3-14db-482a-ba1b-131e7bbb0174"
+        "projectId": "d2f5a413-bbf9-429d-8331-95037034de0b"
       }
     },
     "runtimeVersion": {
       "policy": "sdkVersion"
-    }
+    },
+    "owner": "gnp-autos"
   }
 }

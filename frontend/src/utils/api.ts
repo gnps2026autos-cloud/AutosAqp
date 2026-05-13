@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { User, Vehicle, VehicleCreate, FilterOptions } from '../types';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8001';
+const API_BASE_URL = 'http://192.168.1.245:8001';
 const API_URL = `${API_BASE_URL.replace(/\/$/, '')}/api`;
 
 const api = axios.create({
@@ -13,9 +13,9 @@ const api = axios.create({
 
 // Auth API
 export const authAPI = {
-  createSession: async (sessionId: string): Promise<any> => {
-    const response = await api.post('/auth/session', { session_id: sessionId });
-    return response.data;  // Devuelve user data + session_token
+  demoLogin: async (data: { email: string; name: string; phone?: string; picture?: string }): Promise<any> => {
+    const response = await api.post('/auth/demo-login', data);
+    return response.data;
   },
   getMe: async (token?: string): Promise<User> => {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};

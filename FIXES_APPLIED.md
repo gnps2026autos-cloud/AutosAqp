@@ -58,3 +58,13 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 python -m uvicorn server:app --host 0.0.0.0 --port 8001 --reload
 ```
+
+
+## v4 - Inicio de sesión sin Emergent para APK
+
+- Se agregó `POST /api/auth/demo-login` en el backend.
+- Se reemplazó la pantalla de login móvil por un formulario local de nombre, correo y teléfono.
+- Se mantiene el endpoint antiguo `/api/auth/session`, pero la APK ya no depende de Emergent Auth.
+- Se configuró `usesCleartextTraffic` para permitir `http://IP_LOCAL:8001` durante pruebas en Android.
+- Se actualizó `eas.json` para que el perfil `preview` reciba `EXPO_PUBLIC_BACKEND_URL`.
+
