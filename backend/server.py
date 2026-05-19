@@ -13,6 +13,9 @@ import uuid
 import base64
 import re
 from datetime import datetime, timezone, timedelta
+import bcrypt
+import unicodedata
+from difflib import SequenceMatcher
 
 try:
     import cloudinary
@@ -220,8 +223,9 @@ class User(BaseModel):
     user_id: str
     email: EmailStr
     name: str
-    picture: Optional[str] = None
+    username: Optional[str] = None
     phone: Optional[str] = None
+    picture: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class UserSession(BaseModel):
@@ -333,11 +337,144 @@ class UserUpdate(BaseModel):
     phone: Optional[str] = None
     picture: Optional[str] = None
 
-class DemoLoginRequest(BaseModel):
+class RegisterRequest(BaseModel):
+    username: str
     email: EmailStr
-    name: str
-    phone: Optional[str] = None
-    picture: Optional[str] = None
+    phone: str
+    password: str
+    confirm_password: str
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{7,30}$")
+PHONE_RE = re.compile(r"^\+[1-9]\d{6,14}$")
+
+
+def normalize_username(username: str) -> str:
+    value = username.strip().lower()
+    value = unicodedata.normalize("NFKD", value)
+    value = "".join(char for char in value if not unicodedata.combining(char))
+    value = re.sub(r"[^a-z0-9]", "", value)
+    return value
+
+
+def validate_username_format(username: str) -> str:
+    clean_username = username.strip()
+
+    if not USERNAME_RE.match(clean_username):
+        raise HTTPException(
+            status_code=400,
+            detail="El nombre de usuario debe tener entre 7 y 30 caracteres. Puede incluir letras, números, punto, guion y guion bajo."
+        )
+
+    return clean_username
+
+
+def validate_password_strength(password: str):
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener mínimo 8 caracteres")
+
+    if not re.search(r"[A-Z]", password):
+        raise HTTPException(status_code=400, detail="La contraseña debe incluir al menos una letra mayúscula")
+
+    if not re.search(r"\d", password):
+        raise HTTPException(status_code=400, detail="La contraseña debe incluir al menos un número")
+
+    if not re.search(r"[^\w\s]", password):
+        raise HTTPException(status_code=400, detail="La contraseña debe incluir al menos un carácter especial")
+
+
+def validate_phone(phone: str) -> str:
+    clean_phone = phone.strip()
+
+    if not PHONE_RE.match(clean_phone):
+        raise HTTPException(
+            status_code=400,
+            detail="El teléfono debe estar en formato internacional. Ejemplo: +51987654321"
+        )
+
+    return clean_phone
+
+
+def hash_password(password: str) -> str:
+    password_bytes = password.encode("utf-8")
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode("utf-8")
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except Exception:
+        return False
+
+
+async def check_username_availability(username: str):
+    normalized = normalize_username(username)
+
+    if len(normalized) < 7:
+        raise HTTPException(
+            status_code=400,
+            detail="El nombre de usuario debe tener al menos 7 caracteres útiles"
+        )
+
+    existing_users = await db.users.find(
+        {"username_normalized": {"$exists": True}},
+        {"_id": 0, "username": 1, "username_normalized": 1}
+    ).to_list(5000)
+
+    for existing in existing_users:
+        existing_normalized = existing.get("username_normalized") or normalize_username(existing.get("username", ""))
+
+        if not existing_normalized:
+            continue
+
+        similarity = SequenceMatcher(None, normalized, existing_normalized).ratio()
+
+        if (
+            normalized == existing_normalized
+            or normalized in existing_normalized
+            or existing_normalized in normalized
+            or similarity >= 0.85
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="El nombre de usuario es muy similar a uno existente. Prueba con otro más diferente."
+            )
+
+    return normalized
+
+
+async def create_session_for_user(user_id: str, response: Response):
+    session_token = f"session_{uuid.uuid4().hex}"
+    expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+
+    await db.user_sessions.delete_many({"user_id": user_id})
+
+    new_session = UserSession(
+        user_id=user_id,
+        session_token=session_token,
+        expires_at=expires_at
+    )
+
+    await db.user_sessions.insert_one(new_session.model_dump())
+
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
+        samesite="lax",
+        max_age=30 * 24 * 60 * 60,
+        path="/"
+    )
+
+    return session_token
 
 # ============= AUTH HELPER =============
 
@@ -391,65 +528,92 @@ async def get_current_user(request: Request, authorization: Optional[str] = Head
 
 # ============= AUTH ENDPOINTS =============
 
-@api_router.post("/auth/demo-login")
-async def demo_login(login_data: DemoLoginRequest, response: Response):
-    """
-    Local/mobile login for APK builds.
-    This avoids Emergent Auth, which only works reliably inside the original builder/web flow.
-    """
+@api_router.post("/auth/register")
+async def register_user(register_data: RegisterRequest):
+    """Registrar usuario con correo, teléfono, nombre de usuario y contraseña."""
+    username = validate_username_format(register_data.username)
+    email = register_data.email.lower().strip()
+    phone = validate_phone(register_data.phone)
+
+    if register_data.password != register_data.confirm_password:
+        raise HTTPException(status_code=400, detail="Las contraseñas no coinciden")
+
+    validate_password_strength(register_data.password)
+
+    existing_email = await db.users.find_one({"email": email}, {"_id": 0})
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Este correo ya está registrado")
+
+    username_normalized = await check_username_availability(username)
+
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    password_hash = hash_password(register_data.password)
+
+    new_user_doc = {
+        "user_id": user_id,
+        "email": email,
+        "name": username,
+        "username": username,
+        "username_normalized": username_normalized,
+        "phone": phone,
+        "password_hash": password_hash,
+        "picture": None,
+        "created_at": datetime.now(timezone.utc)
+    }
+
+    try:
+        await db.users.insert_one(new_user_doc)
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="No se pudo registrar el usuario. Verifica que el correo o usuario no estén repetidos."
+        )
+
+    return {
+        "message": "Usuario registrado correctamente. Ahora puedes iniciar sesión.",
+        "user_id": user_id,
+        "email": email,
+        "username": username
+    }
+
+
+@api_router.post("/auth/login")
+async def login_user(login_data: LoginRequest, response: Response):
+    """Iniciar sesión con correo y contraseña."""
     email = login_data.email.lower().strip()
-    name = login_data.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="El nombre es obligatorio")
 
     user_doc = await db.users.find_one({"email": email}, {"_id": 0})
 
-    update_payload = {"name": name}
-    if login_data.picture is not None:
-        update_payload["picture"] = login_data.picture
-    if login_data.phone is not None:
-        update_payload["phone"] = login_data.phone
+    if not user_doc or not user_doc.get("password_hash"):
+        raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos")
 
-    if user_doc:
-        user_id = user_doc["user_id"]
-        await db.users.update_one({"user_id": user_id}, {"$set": update_payload})
-    else:
-        user_id = f"user_{uuid.uuid4().hex[:12]}"
-        new_user = User(
-            user_id=user_id,
-            email=email,
-            name=name,
-            phone=login_data.phone,
-            picture=login_data.picture
-        )
-        await db.users.insert_one(new_user.model_dump())
+    if not verify_password(login_data.password, user_doc["password_hash"]):
+        raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos")
 
-    session_token = f"session_{uuid.uuid4().hex}"
-    expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+    session_token = await create_session_for_user(user_doc["user_id"], response)
 
-    await db.user_sessions.delete_many({"user_id": user_id})
-    new_session = UserSession(
-        user_id=user_id,
-        session_token=session_token,
-        expires_at=expires_at
-    )
-    await db.user_sessions.insert_one(new_session.model_dump())
-
-    response.set_cookie(
-        key="session_token",
-        value=session_token,
-        httponly=True,
-        secure=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
-        samesite="lax",
-        max_age=30 * 24 * 60 * 60,
-        path="/"
-    )
-
-    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     user_response = User(**user_doc).model_dump()
     user_response["session_token"] = session_token
+
     return user_response
 
+
+@api_router.post("/auth/demo-login")
+async def demo_login_disabled():
+    """Login demo desactivado para producción."""
+    raise HTTPException(
+        status_code=410,
+        detail="El login demo fue desactivado. Usa registro e inicio de sesión con correo y contraseña."
+    )
+
+
+@api_router.post("/auth/session")
+async def old_session_disabled():
+    """Login externo desactivado para producción."""
+    raise HTTPException(
+        status_code=410,
+        detail="El login externo fue desactivado. Usa /auth/login."
+    )
 
 @api_router.get("/auth/me")
 async def get_me(request: Request, authorization: Optional[str] = Header(None)):
@@ -1086,6 +1250,14 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+@app.on_event("startup")
+async def startup_db_indexes():
+    try:
+        await db.users.create_index("email", unique=True)
+        await db.users.create_index("username_normalized", unique=True, sparse=True)
+    except Exception as e:
+        logger.warning(f"No se pudieron crear índices de usuarios: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
