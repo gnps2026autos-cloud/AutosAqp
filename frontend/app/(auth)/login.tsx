@@ -14,49 +14,52 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+
 import { useAuth } from '../../src/contexts/AuthContext';
 import { COLORS_THEME } from '../../src/constants';
 
+const EMAIL_RE = /^\S+@\S+\.\S+$/;
+
 export default function LoginScreen() {
   const router = useRouter();
-  const { loginDemo } = useAuth();
+  const { login } = useAuth();
+
   const [loading, setLoading] = useState(false);
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
-  const handleLocalLogin = async () => {
-    const cleanName = name.trim();
+  const handleLogin = async () => {
     const cleanEmail = email.trim().toLowerCase();
-    const cleanPhone = phone.trim();
 
-    if (!cleanName) {
-      Alert.alert('Dato requerido', 'Ingresa tu nombre para continuar.');
+    if (!EMAIL_RE.test(cleanEmail)) {
+      Alert.alert('Correo inválido', 'Ingresa un correo válido con @.');
       return;
     }
 
-    if (!/^\S+@\S+\.\S+$/.test(cleanEmail)) {
-      Alert.alert('Correo inválido', 'Ingresa un correo válido.');
+    if (!password) {
+      Alert.alert('Contraseña requerida', 'Ingresa tu contraseña.');
       return;
     }
 
     try {
       setLoading(true);
-      await loginDemo({
-        name: cleanName,
-        email: cleanEmail,
-        phone: cleanPhone || undefined,
-      });
+      await login(cleanEmail, password);
       router.replace('/(tabs)/home');
     } catch (error: any) {
-      const detail = error?.response?.data?.detail || error?.message || 'No se pudo iniciar sesión.';
-      Alert.alert(
-        'Error de inicio de sesión',
-        `${detail}\n\nVerifica que el backend esté encendido y que la URL del frontend apunte a la IP correcta.`
-      );
+      const detail =
+        error?.response?.data?.detail ||
+        error?.message ||
+        'No se pudo iniciar sesión.';
+
+      Alert.alert('Error de inicio de sesión', detail);
     } finally {
       setLoading(false);
     }
+  };
+
+  const goToRegister = () => {
+    router.push('/(auth)/register');
   };
 
   return (
@@ -78,20 +81,8 @@ export default function LoginScreen() {
           <View style={styles.formCard}>
             <Text style={styles.formTitle}>Iniciar sesión</Text>
             <Text style={styles.formSubtitle}>
-              Esta versión usa inicio de sesión local para APK, sin depender de Emergent Auth.
+              Ingresa con tu correo y contraseña registrados.
             </Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nombre</Text>
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="Ej.: Giova"
-                placeholderTextColor="#9CA3AF"
-                autoCapitalize="words"
-              />
-            </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Correo</Text>
@@ -108,20 +99,34 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>WhatsApp / teléfono</Text>
-              <TextInput
-                style={styles.input}
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="Ej.: 938567871"
-                placeholderTextColor="#9CA3AF"
-                keyboardType="phone-pad"
-              />
+              <Text style={styles.label}>Contraseña</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Ingresa tu contraseña"
+                  placeholderTextColor="#9CA3AF"
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword((prev) => !prev)}
+                  style={styles.eyeButton}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={22}
+                    color="#6B7280"
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
 
             <TouchableOpacity
               style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-              onPress={handleLocalLogin}
+              onPress={handleLogin}
               activeOpacity={0.85}
               disabled={loading}
             >
@@ -130,8 +135,15 @@ export default function LoginScreen() {
               ) : (
                 <Ionicons name="log-in-outline" size={24} color="#fff" />
               )}
-              <Text style={styles.buttonText}>{loading ? 'Ingresando...' : 'Entrar a la app'}</Text>
+              <Text style={styles.buttonText}>{loading ? 'Ingresando...' : 'Iniciar sesión'}</Text>
             </TouchableOpacity>
+
+            <View style={styles.registerContainer}>
+              <Text style={styles.registerText}>¿No tienes cuenta?</Text>
+              <TouchableOpacity onPress={goToRegister} disabled={loading}>
+                <Text style={styles.registerLink}> Registrarse</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -228,6 +240,25 @@ const styles = StyleSheet.create({
     color: COLORS_THEME.textPrimary,
     backgroundColor: '#F9FAFB',
   },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: COLORS_THEME.textPrimary,
+  },
+  eyeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
   loginButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -245,5 +276,19 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  registerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 18,
+  },
+  registerText: {
+    fontSize: 14,
+    color: COLORS_THEME.textSecondary,
+  },
+  registerLink: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS_THEME.primary,
   },
 });
