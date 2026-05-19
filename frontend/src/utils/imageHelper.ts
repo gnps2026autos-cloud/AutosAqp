@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 export const pickImage = async (): Promise<string | null> => {
   try {
@@ -12,8 +13,8 @@ export const pickImage = async (): Promise<string | null> => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: false,
-      quality: 0.7,
-      base64: true,
+      quality: 1,
+      base64: false,
     });
 
     if (result.canceled || !result.assets || result.assets.length === 0) {
@@ -22,14 +23,28 @@ export const pickImage = async (): Promise<string | null> => {
 
     const asset = result.assets[0];
 
-    if (!asset.base64) {
-      console.warn('No se pudo obtener la imagen en base64');
+    if (!asset.uri) {
+      console.warn('No se pudo obtener la URI de la imagen');
       return null;
     }
 
-    const mimeType = asset.mimeType || 'image/jpeg';
+    const manipulated = await ImageManipulator.manipulateAsync(
+      asset.uri,
+      [
+        {
+          resize: {
+            width: 1000,
+          },
+        },
+      ],
+      {
+        compress: 0.45,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: false,
+      }
+    );
 
-    return `data:${mimeType};base64,${asset.base64}`;
+    return manipulated.uri;
   } catch (error) {
     console.error('Error picking image:', error);
     return null;

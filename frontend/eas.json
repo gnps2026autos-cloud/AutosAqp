@@ -6,12 +6,20 @@
   "build": {
     "preview": {
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "http://192.168.1.245:8001"
+        "EXPO_PUBLIC_BACKEND_URL": "https://autosaqp-backend.onrender.com",
+        "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "dvyw01sd7",
+        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "autosaqp_unsigned"
       },
       "android": {
         "buildType": "apk"
       }
     },
-    "production": {}
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://autosaqp-backend.onrender.com",
+        "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "tu_cloud_name",
+        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "autosaqp_unsigned"
+      }
+    }
   }
 }
